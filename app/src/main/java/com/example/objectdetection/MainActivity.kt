@@ -20,6 +20,7 @@ import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Button
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -29,6 +30,8 @@ import android.util.Log
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.core.content.ContextCompat.getMainExecutor
 import java.util.concurrent.Executor
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 
 // --- Class Labels Data ---
 private val YOLO_CLASSES = listOf(
@@ -188,6 +191,15 @@ private fun transformCoordinates(
 fun CameraPreview(detector: YOLODetector) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val tts = remember {
+        TextToSpeech(context, null)
+    }
+    DisposableEffect(tts) {
+        onDispose {
+            tts.stop()
+            tts.shutdown()
+        }
+    }
 
     // State variables for detection results and image metadata
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
@@ -294,6 +306,17 @@ fun CameraPreview(detector: YOLODetector) {
                     )
                 }
             }
+        }
+        Button(onClick = {
+            tts.language = Locale.US
+            val detectedObjects = detections.joinToString(separator = ", ") { getLabel(it.classId) }
+            if (detectedObjects.isNotEmpty()) {
+                tts.speak(detectedObjects, TextToSpeech.QUEUE_FLUSH, null, null)
+            } else {
+                tts.speak("No objects detected", TextToSpeech.QUEUE_FLUSH, null, null)
+            }
+        }) {
+            Text("Speak")
         }
     }
 }
