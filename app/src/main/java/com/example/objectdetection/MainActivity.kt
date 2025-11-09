@@ -118,7 +118,8 @@ private data class TransformedBox(
     val top: Float,
     val width: Float,
     val height: Float,
-    val labelText: String
+    val labelText: String,
+    val direction: String
 )
 
 /**
@@ -184,6 +185,10 @@ private fun transformCoordinates(
     val finalWidth = (right - left) * targetWidth
     val finalHeight = (bottom - top) * targetHeight
 
+    // Calculate center X for direction
+    val centerX = finalLeft + (finalWidth / 2)
+    val direction = getDirection(centerX, targetWidth)
+
     // 4. Construct the label with the class name
     val labelName = getLabel(det.classId)
 
@@ -192,12 +197,24 @@ private fun transformCoordinates(
         top = finalTop,
         width = finalWidth,
         height = finalHeight,
-        labelText = "$labelName ${(det.confidence * 100).toInt()}%"
+        labelText = "$labelName ${(det.confidence * 100).toInt()}%",
+        direction = direction
     )
 }
 
 private fun filterDetections(detections: List<DetectionResult>, desiredLabels: List<String>): List<DetectionResult> {
     return detections.filter { det -> desiredLabels.contains(getLabel(det.classId)) }
+}
+
+private fun getDirection(centerX: Float, screenWidth: Float): String {
+    val oneThird = screenWidth / 3
+    val twoThirds = 2 * screenWidth / 3
+
+    return when {
+        centerX < oneThird -> "left"
+        centerX > twoThirds -> "right"
+        else -> "center"
+    }
 }
 
 @Composable
@@ -328,7 +345,7 @@ fun CameraPreview(detector: YOLODetector) {
                     )
 
                     drawText(
-                        transformedBox.labelText,
+                        "${transformedBox.labelText} ${transformedBox.direction}",
                         transformedBox.left,
                         transformedBox.top - 10f, // Position text slightly above the box
                         paint
@@ -366,7 +383,17 @@ fun CameraPreview(detector: YOLODetector) {
             // Speak Button
             Button(onClick = {
                 tts.language = Locale.US
-                val detectedObjects = filteredDetections.joinToString(separator = ", ") { getLabel(it.classId) }
+                val detectedObjects = filteredDetections.joinToString(separator = ", ") { det ->
+                    val transformedBox = transformCoordinates(
+                        det = det,
+                        srcWidth = bitmapWidth,
+                        srcHeight = bitmapHeight,
+                        rotationDegrees = rotationDegrees,
+                        targetWidth = size.width, // Use canvasWidth here
+                        targetHeight = size.height // Use canvasHeight here
+                    )
+                    "${getLabel(det.classId)} on the ${transformedBox.direction}"
+                }
                 if (detectedObjects.isNotEmpty()) {
                     tts.speak(detectedObjects, TextToSpeech.QUEUE_FLUSH, null, null)
                 } else {
