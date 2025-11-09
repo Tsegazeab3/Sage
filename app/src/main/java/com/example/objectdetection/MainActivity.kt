@@ -191,6 +191,14 @@ private fun filterDetections(detections: List<DetectionResult>, desiredLabels: L
     return detections.filter { det -> desiredLabels.contains(getLabel(det.classId)) }
 }
 
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+
 @Composable
 fun CameraPreview(detector: YOLODetector) {
     val context = LocalContext.current
@@ -211,9 +219,19 @@ fun CameraPreview(detector: YOLODetector) {
     var bitmapHeight by remember { mutableStateOf(1) }
     var rotationDegrees by remember { mutableStateOf(0) }
 
+    // Dropdown state
+    val houseObjects = listOf(
+        "person", "cat", "dog", "water bottle", "cup", "fork", "knife", "spoon", "bowl",
+        "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
+        "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
+        "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
+    )
+    var selectedObject by remember { mutableStateOf("cell phone") }
+    var expanded by remember { mutableStateOf(false) }
+
     // Filtered detections derived from the raw detections
-    val filteredDetections = remember(detections) {
-        val desiredLabels = listOf("cell phone") // This can be updated from a dropdown later
+    val filteredDetections = remember(detections, selectedObject) {
+        val desiredLabels = listOf(selectedObject)
         filterDetections(detections, desiredLabels)
     }
 
@@ -317,16 +335,45 @@ fun CameraPreview(detector: YOLODetector) {
                 }
             }
         }
-        Button(onClick = {
-            tts.language = Locale.US
-            val detectedObjects = filteredDetections.joinToString(separator = ", ") { getLabel(it.classId) }
-            if (detectedObjects.isNotEmpty()) {
-                tts.speak(detectedObjects, TextToSpeech.QUEUE_FLUSH, null, null)
-            } else {
-                tts.speak("No objects detected", TextToSpeech.QUEUE_FLUSH, null, null)
+
+        // UI Elements
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Dropdown Menu
+            Box {
+                Button(onClick = { expanded = true }) {
+                    Text(text = selectedObject)
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    houseObjects.forEach { label ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                selectedObject = label
+                                expanded = false
+                            }
+                        )
+                    }
+                }
             }
-        }) {
-            Text("Speak")
+
+            // Speak Button
+            Button(onClick = {
+                tts.language = Locale.US
+                val detectedObjects = filteredDetections.joinToString(separator = ", ") { getLabel(it.classId) }
+                if (detectedObjects.isNotEmpty()) {
+                    tts.speak(detectedObjects, TextToSpeech.QUEUE_FLUSH, null, null)
+                } else {
+                    tts.speak("No objects detected", TextToSpeech.QUEUE_FLUSH, null, null)
+                }
+            }) {
+                Text("Speak")
+            }
         }
     }
 }
