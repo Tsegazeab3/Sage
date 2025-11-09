@@ -39,6 +39,8 @@ import android.speech.tts.TextToSpeech
 import java.util.Locale
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 
@@ -231,6 +233,12 @@ fun CameraPreview(detector: YOLODetector) {
         }
     }
 
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
+
     // State variables for detection results and image metadata
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
     var bitmapWidth by remember { mutableStateOf(1) } // Default to 1 to avoid division by zero
@@ -389,8 +397,8 @@ fun CameraPreview(detector: YOLODetector) {
                         srcWidth = bitmapWidth,
                         srcHeight = bitmapHeight,
                         rotationDegrees = rotationDegrees,
-                        targetWidth = size.width, // Use canvasWidth here
-                        targetHeight = size.height // Use canvasHeight here
+                        targetWidth = screenWidthPx,
+                        targetHeight = screenHeightPx
                     )
                     "${getLabel(det.classId)} on the ${transformedBox.direction}"
                 }
