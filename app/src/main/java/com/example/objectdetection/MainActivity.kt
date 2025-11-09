@@ -227,6 +227,8 @@ fun CameraPreview(detector: YOLODetector) {
     val tts = remember {
         TextToSpeech(context, null)
     }
+    val cameraState = rememberCameraState(tts = tts)
+
     DisposableEffect(tts) {
         onDispose {
             tts.stop()
@@ -234,63 +236,7 @@ fun CameraPreview(detector: YOLODetector) {
         }
     }
 
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
-
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
-
-    // State variables for detection results and image metadata
-    var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
-    var bitmapWidth by remember { mutableStateOf(1) } // Default to 1 to avoid division by zero
-    var bitmapHeight by remember { mutableStateOf(1) }
-    var rotationDegrees by remember { mutableStateOf(0) }
-
-    // Dropdown state
-    val houseObjects = listOf(
-        "person", "cat", "dog", "water bottle", "cup", "fork", "knife", "spoon", "bowl",
-        "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
-        "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-        "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
-    )
-    var selectedObject by remember { mutableStateOf("cell phone") }
-    var expanded by remember { mutableStateOf(false) }
-
-    // Filtered detections derived from the raw detections
-    val filteredDetections = remember(detections, selectedObject) {
-        val desiredLabels = listOf(selectedObject)
-        filterDetections(detections, desiredLabels)
-    }
-
-    // Automatic speaking for dangerous items
-    val dangerousItems = listOf("knife", "fork")
-    var lastSpokenWarning by remember { mutableStateOf("") }
-
-    LaunchedEffect(detections) {
-        val dangerousDetections = detections.filter { dangerousItems.contains(getLabel(it.classId)) }
-        if (dangerousDetections.isNotEmpty()) {
-            val warning = dangerousDetections.joinToString(separator = ", ") { det ->
-                val transformedBox = transformCoordinates(
-                    det = det,
-                    srcWidth = bitmapWidth,
-                    srcHeight = bitmapHeight,
-                    rotationDegrees = rotationDegrees,
-                    targetWidth = screenWidthPx,
-                    targetHeight = screenHeightPx
-                )
-                "Warning, ${getLabel(det.classId)} on the ${transformedBox.direction}"
-            }
-            if (warning != lastSpokenWarning) {
-                tts.speak(warning, TextToSpeech.QUEUE_FLUSH, null, null)
-                lastSpokenWarning = warning
-            }
-        }
-    }
-
-
     Box(modifier = Modifier.fillMaxSize()) {
-
-        // Camera preview
         AndroidView(
             factory = { context ->
                 PreviewView(context).apply {
@@ -308,15 +254,13 @@ fun CameraPreview(detector: YOLODetector) {
                             .build()
 
                         imageAnalysis.setAnalyzer(getMainExecutor(context)) { imageProxy ->
-                            // Update image metadata
-                            bitmapWidth = imageProxy.width
-                            bitmapHeight = imageProxy.height
-                            rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                            cameraState.bitmapWidth = imageProxy.width
+                            cameraState.bitmapHeight = imageProxy.height
+                            cameraState.rotationDegrees = imageProxy.imageInfo.rotationDegrees
 
-                            // Run detection
                             val bitmap = imageProxy.toBitmap()
                             val results = detector.detect(bitmap)
-                            detections = results
+                            cameraState.onDetections(results)
 
                             imageProxy.close()
                         }
@@ -339,23 +283,20 @@ fun CameraPreview(detector: YOLODetector) {
             modifier = Modifier.fillMaxSize()
         )
 
-        // Draw bounding boxes overlay
         Canvas(modifier = Modifier.fillMaxSize()) {
             val canvasWidth = size.width
             val canvasHeight = size.height
 
-            // Use the collected image dimensions and rotation for transformation
-            filteredDetections.forEach { det ->
+            cameraState.filteredDetections.forEach { det ->
                 val transformedBox = transformCoordinates(
                     det = det,
-                    srcWidth = bitmapWidth,
-                    srcHeight = bitmapHeight,
-                    rotationDegrees = rotationDegrees,
+                    srcWidth = cameraState.bitmapWidth,
+                    srcHeight = cameraState.bitmapHeight,
+                    rotationDegrees = cameraState.rotationDegrees,
                     targetWidth = canvasWidth,
                     targetHeight = canvasHeight
                 )
 
-                // Draw box
                 drawRect(
                     color = Color.Red,
                     topLeft = Offset(transformedBox.left, transformedBox.top),
@@ -363,69 +304,63 @@ fun CameraPreview(detector: YOLODetector) {
                     style = Stroke(width = 3.dp.toPx())
                 )
 
-                // Draw label using native canvas for text
                 drawContext.canvas.nativeCanvas.apply {
                     val paint = android.graphics.Paint().apply {
                         color = android.graphics.Color.WHITE
                         textSize = 30f
                         style = android.graphics.Paint.Style.FILL
                     }
-                    // Draw a background rectangle for the text for better contrast (optional but recommended)
                     drawRect(
                         transformedBox.left,
                         transformedBox.top - 40f,
-                        transformedBox.left + (transformedBox.labelText.length * 15f), // Simplified width estimate
+                        transformedBox.left + (transformedBox.labelText.length * 15f),
                         transformedBox.top,
                         android.graphics.Paint().apply { color = android.graphics.Color.RED }
                     )
-
                     drawText(
                         "${transformedBox.labelText} ${transformedBox.direction}",
                         transformedBox.left,
-                        transformedBox.top - 10f, // Position text slightly above the box
+                        transformedBox.top - 10f,
                         paint
                     )
                 }
             }
         }
 
-        // UI Elements
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Dropdown Menu
             Box {
-                Button(onClick = { expanded = true }) {
-                    Text(text = selectedObject)
+                Button(onClick = { cameraState.expanded = true }) {
+                    Text(text = cameraState.selectedObject)
                 }
                 DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
+                    expanded = cameraState.expanded,
+                    onDismissRequest = { cameraState.expanded = false }
                 ) {
-                    houseObjects.forEach { label ->
+                    YOLO_CLASSES.forEach { label ->
                         DropdownMenuItem(
                             text = { Text(label) },
                             onClick = {
-                                selectedObject = label
-                                expanded = false
+                                cameraState.selectedObject = label
+                                cameraState.expanded = false
                             }
                         )
                     }
                 }
             }
 
-            // Speak Button
             Button(onClick = {
                 tts.language = Locale.US
-                val detectedObjects = filteredDetections.joinToString(separator = ", ") { det ->
+                val detectedObjects = cameraState.filteredDetections.joinToString(separator = ", ") { det ->
                     val transformedBox = transformCoordinates(
                         det = det,
-                        srcWidth = bitmapWidth,
-                        srcHeight = bitmapHeight,
-                        rotationDegrees = rotationDegrees,
-                        targetWidth = screenWidthPx,
-                        targetHeight = screenHeightPx
+                        srcWidth = cameraState.bitmapWidth,
+                        srcHeight = cameraState.bitmapHeight,
+                        rotationDegrees = cameraState.rotationDegrees,
+                        targetWidth = cameraState.screenWidthPx,
+                        targetHeight = cameraState.screenHeightPx
                     )
                     "${getLabel(det.classId)} on the ${transformedBox.direction}"
                 }
