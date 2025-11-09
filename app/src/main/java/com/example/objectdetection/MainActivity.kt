@@ -111,6 +111,27 @@ fun CameraPreview(detector: YOLODetector) {
         }
     }
 
+    LaunchedEffect(cameraState.detections) {
+        val dangerousDetections = cameraState.detections.filter { cameraState.dangerousItems.contains(getLabel(it.classId)) }
+        if (dangerousDetections.isNotEmpty()) {
+            val warning = dangerousDetections.joinToString(separator = ", ") { det ->
+                val transformedBox = transformCoordinates(
+                    det = det,
+                    srcWidth = cameraState.bitmapWidth,
+                    srcHeight = cameraState.bitmapHeight,
+                    rotationDegrees = cameraState.rotationDegrees,
+                    targetWidth = cameraState.screenWidthPx,
+                    targetHeight = cameraState.screenHeightPx
+                )
+                "Warning, ${getLabel(det.classId)} on the ${transformedBox.direction}"
+            }
+            if (warning != cameraState.lastSpokenWarning) {
+                tts.speak(warning, TextToSpeech.QUEUE_FLUSH, null, null)
+                cameraState.lastSpokenWarning = warning
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
             factory = { context ->

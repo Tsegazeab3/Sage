@@ -6,10 +6,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 
 @Composable
 fun rememberCameraState(
@@ -46,35 +47,14 @@ class CameraState(
     var selectedObject by mutableStateOf("cell phone")
     var expanded by mutableStateOf(false)
 
-    private var lastSpokenWarning by mutableStateOf("")
+    var lastSpokenWarning by mutableStateOf("") // Moved here
+
+    val dangerousItems = listOf("knife", "fork") // Moved here
 
     val filteredDetections: List<DetectionResult>
         get() = filterDetections(detections, listOf(selectedObject))
 
     fun onDetections(newDetections: List<DetectionResult>) {
         detections = newDetections
-        checkForDangerousItems()
-    }
-
-    private fun checkForDangerousItems() {
-        val dangerousItems = listOf("knife", "fork")
-        val dangerousDetections = detections.filter { dangerousItems.contains(getLabel(it.classId)) }
-        if (dangerousDetections.isNotEmpty()) {
-            val warning = dangerousDetections.joinToString(separator = ", ") { det ->
-                val transformedBox = transformCoordinates(
-                    det = det,
-                    srcWidth = bitmapWidth,
-                    srcHeight = bitmapHeight,
-                    rotationDegrees = rotationDegrees,
-                    targetWidth = screenWidthPx,
-                    targetHeight = screenHeightPx
-                )
-                "Warning, ${getLabel(det.classId)} on the ${transformedBox.direction}"
-            }
-            if (warning != lastSpokenWarning) {
-                tts.speak(warning, TextToSpeech.QUEUE_FLUSH, null, null)
-                lastSpokenWarning = warning
-            }
-        }
     }
 }
