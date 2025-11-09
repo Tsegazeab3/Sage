@@ -249,7 +249,8 @@ fun CameraPreview(detector: YOLODetector) {
 
             Button(onClick = {
                 tts.language = Locale.US
-                val detectedObjects = cameraState.filteredDetections.joinToString(separator = ", ") { det ->
+                val nonDangerousDetections = cameraState.detections.filterNot { cameraState.dangerousItems.contains(getLabel(it.classId)) }
+                val detectedObjects = nonDangerousDetections.joinToString(separator = ", ") { det ->
                     val transformedBox = transformCoordinates(
                         det = det,
                         srcWidth = cameraState.bitmapWidth,
