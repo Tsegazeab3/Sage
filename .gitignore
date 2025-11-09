@@ -1,1 +1,8 @@
 .idea/vcs.xml
+.gradle/
+.idea/apps.iml
+.idea/caches/
+.idea/modules.xml
+.idea/modules/
+app/.cxx/
+local.properties
