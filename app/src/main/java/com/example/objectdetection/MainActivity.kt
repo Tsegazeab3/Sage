@@ -32,6 +32,10 @@ import androidx.core.content.ContextCompat.getMainExecutor
 import java.util.concurrent.Executor
 import android.speech.tts.TextToSpeech
 import java.util.Locale
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 
 // --- Class Labels Data ---
 private val YOLO_CLASSES = listOf(
@@ -191,14 +195,6 @@ private fun filterDetections(detections: List<DetectionResult>, desiredLabels: L
     return detections.filter { det -> desiredLabels.contains(getLabel(det.classId)) }
 }
 
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-
-import androidx.compose.foundation.layout.Column
-import androidx.compose.ui.Alignment
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-
 @Composable
 fun CameraPreview(detector: YOLODetector) {
     val context = LocalContext.current
@@ -227,7 +223,7 @@ fun CameraPreview(detector: YOLODetector) {
         "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
     )
     var selectedObject by remember { mutableStateOf("cell phone") }
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableState of(false) }
 
     // Filtered detections derived from the raw detections
     val filteredDetections = remember(detections, selectedObject) {
