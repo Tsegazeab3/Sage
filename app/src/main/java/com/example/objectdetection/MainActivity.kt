@@ -9,7 +9,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -223,7 +228,7 @@ fun CameraPreview(detector: YOLODetector) {
         "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
     )
     var selectedObject by remember { mutableStateOf("cell phone") }
-    var expanded by remember { mutableState of(false) }
+    var expanded by remember { mutableStateOf(false) }
 
     // Filtered detections derived from the raw detections
     val filteredDetections = remember(detections, selectedObject) {
