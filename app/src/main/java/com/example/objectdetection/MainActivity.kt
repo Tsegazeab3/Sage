@@ -203,9 +203,14 @@ fun CameraPreview(detector: YOLODetector) {
 
     // State variables for detection results and image metadata
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
+    var filteredDetections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
     var bitmapWidth by remember { mutableStateOf(1) } // Default to 1 to avoid division by zero
     var bitmapHeight by remember { mutableStateOf(1) }
     var rotationDegrees by remember { mutableStateOf(0) }
+
+    LaunchedEffect(detections) {
+        filteredDetections = detections.filter { getLabel(it.classId) == "cell phone" }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -264,7 +269,7 @@ fun CameraPreview(detector: YOLODetector) {
             val canvasHeight = size.height
 
             // Use the collected image dimensions and rotation for transformation
-            detections.forEach { det ->
+            filteredDetections.forEach { det ->
                 val transformedBox = transformCoordinates(
                     det = det,
                     srcWidth = bitmapWidth,
@@ -309,7 +314,7 @@ fun CameraPreview(detector: YOLODetector) {
         }
         Button(onClick = {
             tts.language = Locale.US
-            val detectedObjects = detections.joinToString(separator = ", ") { getLabel(it.classId) }
+            val detectedObjects = filteredDetections.joinToString(separator = ", ") { getLabel(it.classId) }
             if (detectedObjects.isNotEmpty()) {
                 tts.speak(detectedObjects, TextToSpeech.QUEUE_FLUSH, null, null)
             } else {
