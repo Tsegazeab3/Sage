@@ -111,10 +111,14 @@ fun CameraPreview(detector: YOLODetector) {
         }
     }
 
-    LaunchedEffect(cameraState.detections) {
+    LaunchedEffect(cameraState.detections, cameraState.selectedObject) {
         val dangerousDetections = cameraState.detections.filter { cameraState.dangerousItems.contains(getLabel(it.classId)) }
-        if (dangerousDetections.isNotEmpty()) {
-            val warning = dangerousDetections.joinToString(separator = ", ") { det ->
+        val selectedDetections = cameraState.detections.filter { getLabel(it.classId) == cameraState.selectedObject }
+
+        val allDetectionsToSpeak = (dangerousDetections + selectedDetections).distinct()
+
+        if (allDetectionsToSpeak.isNotEmpty()) {
+            val message = allDetectionsToSpeak.joinToString(separator = ", ") { det ->
                 val transformedBox = transformCoordinates(
                     det = det,
                     srcWidth = cameraState.bitmapWidth,
@@ -123,11 +127,12 @@ fun CameraPreview(detector: YOLODetector) {
                     targetWidth = cameraState.screenWidthPx,
                     targetHeight = cameraState.screenHeightPx
                 )
-                "Warning, ${getLabel(det.classId)} on the ${transformedBox.direction}"
+                val prefix = if (cameraState.dangerousItems.contains(getLabel(det.classId))) "Warning, " else ""
+                "$prefix${getLabel(det.classId)} on the ${transformedBox.direction}"
             }
-            if (warning != cameraState.lastSpokenWarning) {
-                tts.speak(warning, TextToSpeech.QUEUE_FLUSH, null, null)
-                cameraState.lastSpokenWarning = warning
+            if (message != cameraState.lastSpokenWarning) {
+                tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, null)
+                cameraState.lastSpokenWarning = message
             }
         }
     }
