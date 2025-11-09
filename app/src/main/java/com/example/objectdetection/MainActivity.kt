@@ -261,6 +261,32 @@ fun CameraPreview(detector: YOLODetector) {
         filterDetections(detections, desiredLabels)
     }
 
+    // Automatic speaking for dangerous items
+    val dangerousItems = listOf("knife")
+    var lastSpokenWarning by remember { mutableStateOf("") }
+
+    LaunchedEffect(detections) {
+        val dangerousDetections = detections.filter { dangerousItems.contains(getLabel(it.classId)) }
+        if (dangerousDetections.isNotEmpty()) {
+            val warning = dangerousDetections.joinToString(separator = ", ") { det ->
+                val transformedBox = transformCoordinates(
+                    det = det,
+                    srcWidth = bitmapWidth,
+                    srcHeight = bitmapHeight,
+                    rotationDegrees = rotationDegrees,
+                    targetWidth = screenWidthPx,
+                    targetHeight = screenHeightPx
+                )
+                "Warning, ${getLabel(det.classId)} on the ${transformedBox.direction}"
+            }
+            if (warning != lastSpokenWarning) {
+                tts.speak(warning, TextToSpeech.QUEUE_FLUSH, null, null)
+                lastSpokenWarning = warning
+            }
+        }
+    }
+
+
     Box(modifier = Modifier.fillMaxSize()) {
 
         // Camera preview
