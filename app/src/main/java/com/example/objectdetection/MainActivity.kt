@@ -262,7 +262,7 @@ fun CameraPreview(detector: YOLODetector) {
     }
 
     // Automatic speaking for dangerous items
-    val dangerousItems = listOf("knife")
+    val dangerousItems = listOf("knife", "fork")
     var lastSpokenWarning by remember { mutableStateOf("") }
 
     LaunchedEffect(detections) {
