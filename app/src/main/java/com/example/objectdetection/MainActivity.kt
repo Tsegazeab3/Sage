@@ -187,6 +187,10 @@ private fun transformCoordinates(
     )
 }
 
+private fun filterDetections(detections: List<DetectionResult>, desiredLabels: List<String>): List<DetectionResult> {
+    return detections.filter { det -> desiredLabels.contains(getLabel(det.classId)) }
+}
+
 @Composable
 fun CameraPreview(detector: YOLODetector) {
     val context = LocalContext.current
@@ -203,13 +207,14 @@ fun CameraPreview(detector: YOLODetector) {
 
     // State variables for detection results and image metadata
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
-    var filteredDetections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
     var bitmapWidth by remember { mutableStateOf(1) } // Default to 1 to avoid division by zero
     var bitmapHeight by remember { mutableStateOf(1) }
     var rotationDegrees by remember { mutableStateOf(0) }
 
-    LaunchedEffect(detections) {
-        filteredDetections = detections.filter { getLabel(it.classId) == "cell phone" }
+    // Filtered detections derived from the raw detections
+    val filteredDetections = remember(detections) {
+        val desiredLabels = listOf("cell phone") // This can be updated from a dropdown later
+        filterDetections(detections, desiredLabels)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
