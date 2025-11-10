@@ -34,7 +34,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 fun CameraPreview(
     detector: YOLODetector,
     selectedObject: String,
-    onDetections: (List<DetectionResult>) -> Unit
+    onDetections: (List<DetectionResult>, Int) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -59,7 +59,7 @@ fun CameraPreview(
                         imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
                             val bitmap = imageProxy.toBitmap()
                             val detections = detector.detect(bitmap)
-                            onDetections(detections)
+                            onDetections(detections, imageProxy.imageInfo.rotationDegrees)
                             imageProxy.close()
                         }
 

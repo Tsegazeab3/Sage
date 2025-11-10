@@ -310,7 +310,8 @@ fun ModeScreenContent(
 
         SearchSection(
             onSearch = onSearch,
-            color = color
+            color = color,
+            showSearchButton = true
         )
     }
 }
@@ -377,7 +378,7 @@ fun DetectionModeSwitch(currentMode: DetectionMode, onModeChange: (DetectionMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchSection(onSearch: (String) -> Unit, color: Color) {
+fun SearchSection(onSearch: (String) -> Unit, color: Color, showSearchButton: Boolean = true) {
     var expanded by remember { mutableStateOf(false) }
     var selectedItem by remember { mutableStateOf(HOUSE_CLASSES[0]) }
 
@@ -420,6 +421,9 @@ fun SearchSection(onSearch: (String) -> Unit, color: Color) {
                             onClick = {
                                 selectedItem = item
                                 expanded = false
+                                if (!showSearchButton) {
+                                    onSearch(item)
+                                }
                                 playAudioFeedback("Selected $item for search.")
                             },
                             modifier = Modifier.semantics { contentDescription = "Select $item" }
@@ -428,16 +432,18 @@ fun SearchSection(onSearch: (String) -> Unit, color: Color) {
                 }
             }
 
-            Button(
-                onClick = { onSearch(selectedItem) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp)
-                    .semantics { contentDescription = "Start search for the selected object" },
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = color)
-            ) {
-                Text("Search", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            if (showSearchButton) {
+                Button(
+                    onClick = { onSearch(selectedItem) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .semantics { contentDescription = "Start search for the selected object" },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = color)
+                ) {
+                    Text("Search", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
             }
         }
     }
