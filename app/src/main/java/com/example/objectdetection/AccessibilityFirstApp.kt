@@ -1,6 +1,7 @@
 package com.example.objectdetection
 
 import android.content.Context
+import android.widget.Toast
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -102,14 +103,26 @@ sealed class NavigationItem(var route: String, var icon: ImageVector, var title:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccessibilityFirstApp(detector: YOLODetector) {
+fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?, tcpServer: TCPServer) {
     val navController = rememberNavController()
     val dangerousItems = remember { mutableStateListOf<String>() }
+    val context = LocalContext.current
+
+    LaunchedEffect(tcpServer) {
+        tcpServer.messages.collect { message ->
+            if (message == "BUTTON_PRESSED") {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Button Pressed!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     Scaffold(
         bottomBar = { BottomNavigationBar(navController) }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            Navigation(navController = navController, detector = detector, dangerousItems = dangerousItems)
+            Navigation(navController = navController, detector = detector, dangerousItems = dangerousItems, ipAddress = ipAddress)
         }
     }
 }
@@ -147,13 +160,13 @@ fun BottomNavigationBar(navController: NavController) {
 }
 
 @Composable
-fun Navigation(navController: NavHostController, detector: YOLODetector, dangerousItems: MutableList<String>) {
+fun Navigation(navController: NavHostController, detector: YOLODetector, dangerousItems: MutableList<String>, ipAddress: String?) {
     NavHost(navController, startDestination = NavigationItem.Home.route) {
         composable(NavigationItem.Home.route) {
             HomeScreen(detector = detector, dangerousItems = dangerousItems)
         }
         composable(NavigationItem.Settings.route) {
-            SettingsScreen(dangerousItems = dangerousItems)
+            SettingsScreen(dangerousItems = dangerousItems, ipAddress = ipAddress)
         }
         composable(NavigationItem.Help.route) {
             HelpScreen()
@@ -469,7 +482,7 @@ fun RowScope.ModeButton(text: String, onClick: () -> Unit, isSelected: Boolean, 
 }
 
 @Composable
-fun SettingsScreen(dangerousItems: MutableList<String>) {
+fun SettingsScreen(dangerousItems: MutableList<String>, ipAddress: String?) {
     var houseTimeGap by remember { mutableStateOf(1) }
     var roadTimeGap by remember { mutableStateOf(1) }
     val timeGaps = listOf(1, 2, 3, 4, 5)
@@ -484,6 +497,24 @@ fun SettingsScreen(dangerousItems: MutableList<String>) {
     ) {
         item {
             Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        }
+        item {
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Phone IP Address", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(ipAddress ?: "No local IP found", fontSize = 18.sp)
+                    Text("TCP Port: 8080", fontSize = 18.sp)
+                }
+            }
         }
         item {
             TimeGapSelector(

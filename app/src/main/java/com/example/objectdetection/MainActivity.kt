@@ -48,6 +48,8 @@ import androidx.compose.material3.DropdownMenuItem
 class MainActivity : ComponentActivity() {
     private lateinit var detector: YOLODetector
     private var hasCameraPermission by mutableStateOf(false)
+    private val tcpServer = TCPServer()
+    private var ipAddress: String? = null
 
     // Camera permission request
     private val requestPermission = registerForActivityResult(
@@ -58,6 +60,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        tcpServer.start()
+        ipAddress = NetworkUtils.getLocalIpAddress()
 
         // Initialize detector
         detector = YOLODetector()
@@ -69,7 +73,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             ObjectDetectionTheme {
                 if (hasCameraPermission) {
-                    AccessibilityFirstApp(detector = detector)
+                    AccessibilityFirstApp(detector = detector, ipAddress = ipAddress, tcpServer = tcpServer)
                 } else {
                     Text(
                         text = "Requesting camera permission...",
@@ -78,6 +82,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        tcpServer.stop()
     }
 
     private fun requestCameraPermission() {
