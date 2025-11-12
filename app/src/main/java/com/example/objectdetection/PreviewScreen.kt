@@ -1,5 +1,6 @@
 package com.example.objectdetection
 
+import android.graphics.RectF
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
@@ -20,8 +21,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import android.util.Log
+import com.example.objectdetection.TrackedObject
+import kotlin.math.abs
+import kotlin.math.pow
 
-fun speak(tts: TextToSpeech, labels: List<String>) {
+fun speakLabels(tts: TextToSpeech, labels: List<String>) {
     val message = labels.joinToString(separator = ", ")
     tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, null)
 }
@@ -44,6 +48,8 @@ fun PreviewScreen(
     var highlightAll by remember { mutableStateOf(false) }
     var triggerSpeak by remember { mutableStateOf(false) }
     var rotationDegrees by remember { mutableStateOf(0) }
+    var trackedObjects by remember { mutableStateOf<List<TrackedObject>>(emptyList()) }
+    val screenWidth = LocalContext.current.resources.displayMetrics.widthPixels
 
     LaunchedEffect(tcpServer, isPreview) {
         tcpServer.messages.collect { message ->
@@ -75,8 +81,28 @@ fun PreviewScreen(
 
     LaunchedEffect(triggerSpeak) {
         if (triggerSpeak) {
-            val labels = detections.map { getLabel(it.classId) }
-            speak(tts, labels)
+            val transformedBoxes = detections.map {
+                transformCoordinates(
+                    det = it,
+                    srcWidth = 640,
+                    srcHeight = 640,
+                    rotationDegrees = rotationDegrees,
+                    targetWidth = screenWidth.toFloat(),
+                    targetHeight = screenWidth.toFloat() // Assuming a square preview for simplicity
+                )
+            }
+            val groupedDetections = transformedBoxes.groupBy { it.labelText.substringBefore(" ") }
+            val messages = groupedDetections.map { (label, boxes) ->
+                val count = boxes.size
+                val direction = boxes.first().direction
+                if (count > 1) {
+                    "I see $count ${label}s $direction"
+                } else {
+                    "I see a $label $direction"
+                }
+            }
+            val finalMessage = messages.joinToString(separator = ". ")
+            tts.speak(finalMessage, TextToSpeech.QUEUE_FLUSH, null, null)
             triggerSpeak = false
         }
     }
@@ -84,10 +110,41 @@ fun PreviewScreen(
     LaunchedEffect(detections, selectedItem) {
         if (!isPreview) {
             val foundDetections = detections.filter { getLabel(it.classId) == selectedItem }
-            if (foundDetections.isNotEmpty()) {
-                val labels = foundDetections.map { getLabel(it.classId) }
-                speak(tts, labels.map { "$it found" })
+            val transformedBoxes = foundDetections.map {
+                transformCoordinates(
+                    det = it,
+                    srcWidth = 640,
+                    srcHeight = 640,
+                    rotationDegrees = rotationDegrees,
+                    targetWidth = screenWidth.toFloat(),
+                    targetHeight = screenWidth.toFloat()
+                ) to it
             }
+
+            val newTrackedObjects = transformedBoxes.map { (box, det) ->
+                TrackedObject.fromTransformedBox(box, det)
+            }
+
+            val tolerance = screenWidth / 3f
+            val objectsToAnnounce = transformedBoxes.filter { (box, det) ->
+                val newObj = TrackedObject.fromTransformedBox(box, det)
+                trackedObjects.none { oldObj ->
+                    val distance = kotlin.math.sqrt(
+                        (newObj.centerX - oldObj.centerX).pow(2) + (newObj.centerY - oldObj.centerY).pow(2)
+                    )
+                    oldObj.classId == newObj.classId && distance < tolerance
+                }
+            }
+
+            if (objectsToAnnounce.isNotEmpty()) {
+                val messages = objectsToAnnounce.map { (box, det) ->
+                    val label = getLabel(det.classId)
+                    "I see a $label ${box.direction}"
+                }
+                val finalMessage = messages.joinToString(separator = ". ")
+                tts.speak(finalMessage, TextToSpeech.QUEUE_FLUSH, null, null)
+            }
+            trackedObjects = newTrackedObjects
         }
     }
 

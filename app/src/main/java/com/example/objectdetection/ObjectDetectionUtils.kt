@@ -134,3 +134,13 @@ fun getDirection(centerX: Float, screenWidth: Float): String {
         else -> "center"
     }
 }
+
+data class TrackedObject(val classId: Int, val centerX: Float, val centerY: Float) {
+    companion object {
+        fun fromTransformedBox(box: TransformedBox, det: DetectionResult): TrackedObject {
+            val centerX = box.left + box.width / 2
+            val centerY = box.top + box.height / 2
+            return TrackedObject(det.classId, centerX, centerY)
+        }
+    }
+}
