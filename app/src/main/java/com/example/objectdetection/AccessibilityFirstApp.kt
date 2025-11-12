@@ -108,21 +108,11 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?, tcpServer:
     val dangerousItems = remember { mutableStateListOf<String>() }
     val context = LocalContext.current
 
-    LaunchedEffect(tcpServer) {
-        tcpServer.messages.collect { message ->
-            if (message == "BUTTON_PRESSED") {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Button Pressed!", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
     Scaffold(
         bottomBar = { BottomNavigationBar(navController) }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            Navigation(navController = navController, detector = detector, dangerousItems = dangerousItems, ipAddress = ipAddress)
+            Navigation(navController = navController, detector = detector, dangerousItems = dangerousItems, ipAddress = ipAddress, tcpServer = tcpServer)
         }
     }
 }
@@ -160,10 +150,10 @@ fun BottomNavigationBar(navController: NavController) {
 }
 
 @Composable
-fun Navigation(navController: NavHostController, detector: YOLODetector, dangerousItems: MutableList<String>, ipAddress: String?) {
+fun Navigation(navController: NavHostController, detector: YOLODetector, dangerousItems: MutableList<String>, ipAddress: String?, tcpServer: TCPServer) {
     NavHost(navController, startDestination = NavigationItem.Home.route) {
         composable(NavigationItem.Home.route) {
-            HomeScreen(detector = detector, dangerousItems = dangerousItems)
+            HomeScreen(detector = detector, dangerousItems = dangerousItems, tcpServer = tcpServer)
         }
         composable(NavigationItem.Settings.route) {
             SettingsScreen(dangerousItems = dangerousItems, ipAddress = ipAddress)
@@ -176,12 +166,42 @@ fun Navigation(navController: NavHostController, detector: YOLODetector, dangero
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>) {
+fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>, tcpServer: TCPServer) {
     var operatingMode by remember { mutableStateOf(OperatingMode.HOUSE) }
     val backgroundColor = if (operatingMode == OperatingMode.HOUSE) HouseModeGreen.copy(alpha = 0.1f) else RoadModeBlue.copy(alpha = 0.1f)
     var selectedItem by remember { mutableStateOf(HOUSE_CLASSES[0]) }
     var showPreview by remember { mutableStateOf(false) }
     var isPreview by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    LaunchedEffect(tcpServer, showPreview) {
+        if (!showPreview) {
+            tcpServer.messages.collect { message ->
+                when (message) {
+                    "BUTTON_1_PRESSED" -> {
+                        operatingMode = if (operatingMode == OperatingMode.HOUSE) OperatingMode.ROAD else OperatingMode.HOUSE
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Mode toggled to ${operatingMode.name}", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    "BUTTON_2_PRESSED" -> {
+                        showPreview = true
+                        isPreview = true
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Preview triggered", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    "BUTTON_3_PRESSED" -> {
+                        showPreview = true
+                        isPreview = false
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Search triggered", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -235,7 +255,8 @@ fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>) {
                 onDismiss = { showPreview = false },
                 isPreview = isPreview,
                 dangerousItems = dangerousItems,
-                initialSelectedItem = selectedItem
+                initialSelectedItem = selectedItem,
+                tcpServer = tcpServer
             )
         }
     }

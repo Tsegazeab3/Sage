@@ -32,7 +32,8 @@ fun PreviewScreen(
     onDismiss: () -> Unit,
     isPreview: Boolean,
     dangerousItems: List<String>,
-    initialSelectedItem: String
+    initialSelectedItem: String,
+    tcpServer: TCPServer
 ) {
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
     var selectedItem by remember { mutableStateOf(initialSelectedItem) }
@@ -43,6 +44,34 @@ fun PreviewScreen(
     var highlightAll by remember { mutableStateOf(false) }
     var triggerSpeak by remember { mutableStateOf(false) }
     var rotationDegrees by remember { mutableStateOf(0) }
+
+    LaunchedEffect(tcpServer, isPreview) {
+        tcpServer.messages.collect { message ->
+            when (message) {
+                "BUTTON_1_PRESSED" -> {
+                    if (isPreview) {
+                        highlightAll = !highlightAll
+                    } else {
+                        val currentIndex = HOUSE_CLASSES.indexOf(selectedItem)
+                        val nextIndex = if (currentIndex > 0) currentIndex - 1 else HOUSE_CLASSES.size - 1
+                        selectedItem = HOUSE_CLASSES[nextIndex]
+                    }
+                }
+                "BUTTON_2_PRESSED" -> {
+                    if (isPreview) {
+                        triggerSpeak = true
+                    } else {
+                        val currentIndex = HOUSE_CLASSES.indexOf(selectedItem)
+                        val nextIndex = if (currentIndex < HOUSE_CLASSES.size - 1) currentIndex + 1 else 0
+                        selectedItem = HOUSE_CLASSES[nextIndex]
+                    }
+                }
+                "BUTTON_3_PRESSED" -> {
+                    onDismiss()
+                }
+            }
+        }
+    }
 
     LaunchedEffect(triggerSpeak) {
         if (triggerSpeak) {
