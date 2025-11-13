@@ -1,6 +1,6 @@
 #include <jni.h>
 #include <android/bitmap.h>
-#include <ncnn/net.h>
+#include "../ncnn/include/ncnn/net.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,12 +22,13 @@ public:
 
     bool loadModel(AAssetManager* mgr, const char* param, const char* bin);
     std::vector<DetectionResult> detect(JNIEnv* env, jobject bitmap);
+    std::vector<DetectionResult> detectFromImageProxy(JNIEnv* env, jobject imageProxy);
 
 private:
     ncnn::Net net;
     bool modelLoaded;
 
-    ncnn::Mat preprocess(JNIEnv* env, jobject bitmap);
+    ncnn::Mat preprocess(JNIEnv* env, jobject bitmap, AndroidBitmapInfo& info, void* pixels);
     std::vector<DetectionResult> postprocess(const ncnn::Mat& output, int img_w, int img_h);
 };
 

@@ -1,36 +1,80 @@
 package com.example.objectdetection
 
 import android.content.Context
-import android.widget.Toast
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.objectdetection.ui.theme.DangerRed
 import com.example.objectdetection.ui.theme.HouseModeGreen
 import com.example.objectdetection.ui.theme.RoadModeBlue
 import kotlinx.coroutines.Dispatchers
@@ -39,11 +83,21 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.Canvas
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.activity.ComponentActivity
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import android.graphics.Bitmap
+import android.util.Log
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberUpdatedState
+import com.example.objectdetection.ui.theme.DangerRed
+import java.io.PrintWriter
+import java.net.Socket
 
 // Enums to define the different modes of the app
 enum class OperatingMode {
@@ -107,12 +161,30 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?, tcpServer:
     val navController = rememberNavController()
     val dangerousItems = remember { mutableStateListOf<String>() }
     val context = LocalContext.current
+    var detectionMode by remember { mutableStateOf(DetectionMode.AUTOMATIC) }
+    var sortSearchList by remember { mutableStateOf(false) }
+    var emergencyNumber by remember { mutableStateOf("911") }
+    var arduinoIpAddress by remember { mutableStateOf("192.168.137.2") }
 
     Scaffold(
         bottomBar = { BottomNavigationBar(navController) }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            Navigation(navController = navController, detector = detector, dangerousItems = dangerousItems, ipAddress = ipAddress, tcpServer = tcpServer)
+            Navigation(
+                navController = navController,
+                detector = detector,
+                dangerousItems = dangerousItems,
+                ipAddress = ipAddress,
+                tcpServer = tcpServer,
+                detectionMode = detectionMode,
+                onDetectionModeChange = { detectionMode = it },
+                sortSearchList = sortSearchList,
+                onSortSearchListChange = { sortSearchList = it },
+                emergencyNumber = emergencyNumber,
+                onEmergencyNumberChange = { emergencyNumber = it },
+                arduinoIpAddress = arduinoIpAddress,
+                onArduinoIpAddressChange = { arduinoIpAddress = it }
+            )
         }
     }
 }
@@ -150,13 +222,47 @@ fun BottomNavigationBar(navController: NavController) {
 }
 
 @Composable
-fun Navigation(navController: NavHostController, detector: YOLODetector, dangerousItems: MutableList<String>, ipAddress: String?, tcpServer: TCPServer) {
+fun Navigation(
+    navController: NavHostController,
+    detector: YOLODetector,
+    dangerousItems: MutableList<String>,
+    ipAddress: String?,
+    tcpServer: TCPServer,
+    detectionMode: DetectionMode,
+    onDetectionModeChange: (DetectionMode) -> Unit,
+    sortSearchList: Boolean,
+    onSortSearchListChange: (Boolean) -> Unit,
+    emergencyNumber: String,
+    onEmergencyNumberChange: (String) -> Unit,
+    arduinoIpAddress: String,
+    onArduinoIpAddressChange: (String) -> Unit
+) {
     NavHost(navController, startDestination = NavigationItem.Home.route) {
         composable(NavigationItem.Home.route) {
-            HomeScreen(detector = detector, dangerousItems = dangerousItems, tcpServer = tcpServer)
+            HomeScreen(
+                detector = detector,
+                dangerousItems = dangerousItems,
+                tcpServer = tcpServer,
+                detectionMode = detectionMode,
+                sortSearchList = sortSearchList,
+                emergencyNumber = emergencyNumber,
+                arduinoIpAddress = arduinoIpAddress
+            )
         }
         composable(NavigationItem.Settings.route) {
-            SettingsScreen(dangerousItems = dangerousItems, ipAddress = ipAddress)
+            SettingsScreen(
+                dangerousItems = dangerousItems,
+                ipAddress = ipAddress,
+                detectionMode = detectionMode,
+                onDetectionModeChange = onDetectionModeChange,
+                sortSearchList = sortSearchList,
+                onSortSearchListChange = onSortSearchListChange,
+                navController = navController,
+                emergencyNumber = emergencyNumber,
+                onEmergencyNumberChange = onEmergencyNumberChange,
+                arduinoIpAddress = arduinoIpAddress,
+                onArduinoIpAddressChange = onArduinoIpAddressChange
+            )
         }
         composable(NavigationItem.Help.route) {
             HelpScreen()
@@ -166,7 +272,15 @@ fun Navigation(navController: NavHostController, detector: YOLODetector, dangero
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>, tcpServer: TCPServer) {
+fun HomeScreen(
+    detector: YOLODetector,
+    dangerousItems: List<String>,
+    tcpServer: TCPServer,
+    detectionMode: DetectionMode,
+    sortSearchList: Boolean,
+    emergencyNumber: String,
+    arduinoIpAddress: String
+) {
     var operatingMode by remember { mutableStateOf(OperatingMode.HOUSE) }
     val backgroundColor = if (operatingMode == OperatingMode.HOUSE) HouseModeGreen.copy(alpha = 0.1f) else RoadModeBlue.copy(alpha = 0.1f)
     var selectedItem by remember { mutableStateOf(HOUSE_CLASSES[0]) }
@@ -180,6 +294,7 @@ fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>, tcpServer: 
                 when (message) {
                     "BUTTON_1_PRESSED" -> {
                         operatingMode = if (operatingMode == OperatingMode.HOUSE) OperatingMode.ROAD else OperatingMode.HOUSE
+                        playAudioFeedback("Mode toggled to ${operatingMode.name}")
                         withContext(Dispatchers.Main) {
                             Toast.makeText(context, "Mode toggled to ${operatingMode.name}", Toast.LENGTH_SHORT).show()
                         }
@@ -187,6 +302,7 @@ fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>, tcpServer: 
                     "BUTTON_2_PRESSED" -> {
                         showPreview = true
                         isPreview = true
+                        playAudioFeedback("Preview triggered")
                         withContext(Dispatchers.Main) {
                             Toast.makeText(context, "Preview triggered", Toast.LENGTH_SHORT).show()
                         }
@@ -194,8 +310,16 @@ fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>, tcpServer: 
                     "BUTTON_3_PRESSED" -> {
                         showPreview = true
                         isPreview = false
+                        playAudioFeedback("Search triggered")
                         withContext(Dispatchers.Main) {
                             Toast.makeText(context, "Search triggered", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    "button3_pressed_twice" -> {
+                        callEmergency(context, emergencyNumber)
+                        playAudioFeedback("Emergency call initiated")
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Emergency call initiated", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -231,11 +355,16 @@ fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>, tcpServer: 
 
         item {
             when (operatingMode) {
-                OperatingMode.HOUSE -> HouseModeScreenContent(onSearch = {
-                    selectedItem = it
-                    showPreview = true
-                    isPreview = false
-                }, onSpeak = {})
+                OperatingMode.HOUSE -> HouseModeScreenContent(
+                    onSearch = {
+                        selectedItem = it
+                        showPreview = true
+                        isPreview = false
+                    },
+                    onSpeak = {},
+                    detectionMode = detectionMode,
+                    sortSearchList = sortSearchList
+                )
                 OperatingMode.ROAD -> RoadModeScreenContent(onSearch = {
                     selectedItem = it
                     showPreview = true
@@ -256,73 +385,81 @@ fun HomeScreen(detector: YOLODetector, dangerousItems: List<String>, tcpServer: 
                 isPreview = isPreview,
                 dangerousItems = dangerousItems,
                 initialSelectedItem = selectedItem,
-                tcpServer = tcpServer
+                tcpServer = tcpServer,
+                arduinoIpAddress = arduinoIpAddress
             )
         }
     }
 }
 
+private fun callEmergency(context: Context, emergencyNumber: String) {
+    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$emergencyNumber"))
+    context.startActivity(intent)
+}
+
+suspend fun sendToArduino(ipAddress: String, message: String) {
+    withContext(Dispatchers.IO) {
+        try {
+            val socket = java.net.Socket(ipAddress, 8081)
+            val writer = java.io.PrintWriter(socket.getOutputStream(), true)
+            writer.println(message)
+            socket.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
+
 @Composable
-fun HouseModeScreenContent(onSearch: (String) -> Unit, onSpeak: () -> Unit) {
-    ModeScreenContent(operatingMode = OperatingMode.HOUSE, color = HouseModeGreen, onSearch = onSearch, onSpeak = onSpeak)
+fun HouseModeScreenContent(
+    onSearch: (String) -> Unit,
+    onSpeak: () -> Unit,
+    detectionMode: DetectionMode,
+    sortSearchList: Boolean
+) {
+    ModeScreenContent(
+        operatingMode = OperatingMode.HOUSE,
+        color = HouseModeGreen,
+        onSearch = onSearch,
+        onSpeak = onSpeak,
+        detectionMode = detectionMode,
+        sortSearchList = sortSearchList
+    )
 }
 
 @Composable
 fun RoadModeScreenContent(onSearch: (String) -> Unit, onSpeak: () -> Unit) {
-    var audioFeedbackEnabled by remember { mutableStateOf(true) }
-    ModeScreenContent(
-        operatingMode = OperatingMode.ROAD,
-        color = RoadModeBlue,
-        audioFeedbackEnabled = audioFeedbackEnabled,
-        onAudioFeedbackToggle = { audioFeedbackEnabled = it },
-        onSearch = onSearch,
-        onSpeak = onSpeak
-    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Road Mode - Coming Soon!",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
 }
 
 @Composable
 fun ModeScreenContent(
     operatingMode: OperatingMode,
     color: Color,
-    audioFeedbackEnabled: Boolean? = null,
-    onAudioFeedbackToggle: ((Boolean) -> Unit)? = null,
     onSearch: (String) -> Unit,
-    onSpeak: () -> Unit
+    onSpeak: () -> Unit,
+    detectionMode: DetectionMode,
+    sortSearchList: Boolean
 ) {
-    var detectionMode by remember { mutableStateOf(DetectionMode.AUTOMATIC) }
     val coroutineScope = rememberCoroutineScope()
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        if (operatingMode == OperatingMode.ROAD && onAudioFeedbackToggle != null && audioFeedbackEnabled != null) {
-            Card(
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Audio Feedback", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    Switch(
-                        checked = audioFeedbackEnabled,
-                        onCheckedChange = onAudioFeedbackToggle,
-                        modifier = Modifier.semantics { contentDescription = "Toggle audio feedback for object detection" }
-                    )
-                }
-            }
-        }
-        DetectionModeSwitch(
-            currentMode = detectionMode,
-            onModeChange = { detectionMode = it },
-            color = color
-        )
-
         if (detectionMode == DetectionMode.MANUAL) {
             Card(
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
@@ -345,7 +482,8 @@ fun ModeScreenContent(
         SearchSection(
             onSearch = onSearch,
             color = color,
-            showSearchButton = true
+            showSearchButton = true,
+            sortSearchList = sortSearchList
         )
     }
 }
@@ -412,7 +550,12 @@ fun DetectionModeSwitch(currentMode: DetectionMode, onModeChange: (DetectionMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchSection(onSearch: (String) -> Unit, color: Color, showSearchButton: Boolean = true) {
+fun SearchSection(
+    onSearch: (String) -> Unit,
+    color: Color,
+    showSearchButton: Boolean = true,
+    sortSearchList: Boolean = false
+) {
     var expanded by remember { mutableStateOf(false) }
     var selectedItem by remember { mutableStateOf(HOUSE_CLASSES[0]) }
 
@@ -503,11 +646,25 @@ fun RowScope.ModeButton(text: String, onClick: () -> Unit, isSelected: Boolean, 
 }
 
 @Composable
-fun SettingsScreen(dangerousItems: MutableList<String>, ipAddress: String?) {
+fun SettingsScreen(
+    dangerousItems: MutableList<String>,
+    ipAddress: String?,
+    detectionMode: DetectionMode,
+    onDetectionModeChange: (DetectionMode) -> Unit,
+    sortSearchList: Boolean,
+    onSortSearchListChange: (Boolean) -> Unit,
+    navController: NavHostController,
+    emergencyNumber: String,
+    onEmergencyNumberChange: (String) -> Unit,
+    arduinoIpAddress: String,
+    onArduinoIpAddressChange: (String) -> Unit
+) {
     var houseTimeGap by remember { mutableStateOf(1) }
     var roadTimeGap by remember { mutableStateOf(1) }
     val timeGaps = listOf(1, 2, 3, 4, 5)
     var selectedCamera by remember { mutableStateOf(Camera.PHONE) }
+    var showDangerousItemsPopup by remember { mutableStateOf(false) }
+    var sortDangerousItems by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -518,6 +675,97 @@ fun SettingsScreen(dangerousItems: MutableList<String>, ipAddress: String?) {
     ) {
         item {
             Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        }
+        item {
+            DetectionModeSwitch(
+                currentMode = detectionMode,
+                onModeChange = onDetectionModeChange,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        item {
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Emergency Number", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = emergencyNumber,
+                        onValueChange = onEmergencyNumberChange,
+                        label = { Text("Emergency Number") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        item {
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Arduino IP Address", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = arduinoIpAddress,
+                        onValueChange = onArduinoIpAddressChange,
+                        label = { Text("Arduino IP Address") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        item {
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Sort Search List", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Switch(
+                        checked = sortSearchList,
+                        onCheckedChange = onSortSearchListChange
+                    )
+                }
+            }
+        }
+        item {
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Sort Dangerous Items", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Switch(
+                        checked = sortDangerousItems,
+                        onCheckedChange = { sortDangerousItems = it }
+                    )
+                }
+            }
         }
         item {
             Card(
@@ -571,17 +819,43 @@ fun SettingsScreen(dangerousItems: MutableList<String>, ipAddress: String?) {
             )
         }
         item {
-            DangerousItemsSelector(
-                dangerousItems = dangerousItems,
-                onDangerousItemToggled = { item, isChecked ->
-                    if (isChecked) {
-                        dangerousItems.add(item)
-                    } else {
-                        dangerousItems.remove(item)
-                    }
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showDangerousItemsPopup = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Dangerous Items", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Select Dangerous Items"
+                    )
                 }
-            )
+            }
         }
+    }
+
+    if (showDangerousItemsPopup) {
+        DangerousItemsPopup(
+            dangerousItems = dangerousItems,
+            onDismiss = { showDangerousItemsPopup = false },
+            onDangerousItemToggled = { item, isChecked ->
+                if (isChecked) {
+                    dangerousItems.add(item)
+                } else {
+                    dangerousItems.remove(item)
+                }
+            },
+            sortDangerousItems = sortDangerousItems
+        )
     }
 }
 
@@ -764,6 +1038,76 @@ fun HelpScreen() {
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Visit Support Website", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DangerousItemsPopup(
+    dangerousItems: MutableList<String>,
+    onDismiss: () -> Unit,
+    onDangerousItemToggled: (String, Boolean) -> Unit,
+    sortDangerousItems: Boolean
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            DangerousItemsSelector(
+                dangerousItems = dangerousItems,
+                onDangerousItemToggled = onDangerousItemToggled,
+                sortDangerousItems = sortDangerousItems
+            )
+        }
+    }
+}
+
+@Composable
+fun DangerousItemsSelector(
+    dangerousItems: MutableList<String>,
+    onDangerousItemToggled: (String, Boolean) -> Unit,
+    sortDangerousItems: Boolean
+) {
+    val dangerousItemsList = if (sortDangerousItems) HOUSE_CLASSES.sorted() else HOUSE_CLASSES
+
+    Card(
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Dangerous Items", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = { dangerousItems.clear() }) {
+                Text("Deselect All")
+            }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                items(items = dangerousItemsList) { item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(item, fontSize = 18.sp)
+                        Checkbox(
+                            checked = dangerousItems.contains(item),
+                            onCheckedChange = { isChecked ->
+                                onDangerousItemToggled(item, isChecked)
+                            }
+                        )
                     }
                 }
             }

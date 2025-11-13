@@ -24,6 +24,12 @@ import android.util.Log
 import com.example.objectdetection.TrackedObject
 import kotlin.math.abs
 import kotlin.math.pow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.PrintWriter
+import java.net.Socket
+
+val DangerRed = Color(0xFFB00020) // Define DangerRed here or import from ui.theme
 
 fun speakLabels(tts: TextToSpeech, labels: List<String>) {
     val message = labels.joinToString(separator = ", ")
@@ -37,7 +43,8 @@ fun PreviewScreen(
     isPreview: Boolean,
     dangerousItems: List<String>,
     initialSelectedItem: String,
-    tcpServer: TCPServer
+    tcpServer: TCPServer,
+    arduinoIpAddress: String
 ) {
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
     var selectedItem by remember { mutableStateOf(initialSelectedItem) }
@@ -50,6 +57,7 @@ fun PreviewScreen(
     var rotationDegrees by remember { mutableStateOf(0) }
     var trackedObjects by remember { mutableStateOf<List<TrackedObject>>(emptyList()) }
     val screenWidth = LocalContext.current.resources.displayMetrics.widthPixels
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(tcpServer, isPreview) {
         tcpServer.messages.collect { message ->
@@ -146,6 +154,11 @@ fun PreviewScreen(
             }
             trackedObjects = newTrackedObjects
         }
+
+        // Check for dangerous items and send message to Arduino
+        if (detections.any { dangerousItems.contains(getLabel(it.classId)) }) {
+            sendToArduino(arduinoIpAddress, "DANGER_DETECTED")
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -167,7 +180,7 @@ fun PreviewScreen(
                         targetHeight = size.height
                     )
                     drawRect(
-                        color = if (dangerousItems.contains(label)) Color.Red else Color.Green,
+                        color = if (dangerousItems.contains(label)) DangerRed else Color.Green,
                         topLeft = Offset(transformedBox.left, transformedBox.top),
                         size = Size(transformedBox.width, transformedBox.height),
                         style = Stroke(width = 3.dp.toPx())
