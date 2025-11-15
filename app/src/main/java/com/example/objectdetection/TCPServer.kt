@@ -25,8 +25,13 @@ class TCPServer {
                 // Using a port above 1024 is recommended for non-root Android apps.
                 serverSocket = ServerSocket(8080)
                 while (serverSocket?.isClosed == false) {
-                    val clientSocket = serverSocket!!.accept()
-                    handleClient(clientSocket)
+                    try {
+                        val clientSocket = serverSocket!!.accept()
+                        handleClient(clientSocket)
+                    } catch (e: Exception) {
+                        // Handle exceptions for a single client connection
+                        e.printStackTrace()
+                    }
                 }
             } catch (e: Exception) {
                 // Handle exceptions, e.g., port already in use

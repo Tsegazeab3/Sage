@@ -6,7 +6,6 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,13 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,7 +33,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -45,9 +40,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,11 +51,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -80,24 +72,6 @@ import com.example.objectdetection.ui.theme.RoadModeBlue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
-import android.speech.tts.TextToSpeech
-import androidx.compose.foundation.Canvas
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.activity.ComponentActivity
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
-import android.graphics.Bitmap
-import android.util.Log
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.rememberUpdatedState
-import com.example.objectdetection.ui.theme.DangerRed
-import java.io.PrintWriter
-import java.net.Socket
 
 // Enums to define the different modes of the app
 enum class OperatingMode {
@@ -157,14 +131,24 @@ sealed class NavigationItem(var route: String, var icon: ImageVector, var title:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?, tcpServer: TCPServer) {
+fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?) {
     val navController = rememberNavController()
     val dangerousItems = remember { mutableStateListOf<String>() }
     val context = LocalContext.current
     var detectionMode by remember { mutableStateOf(DetectionMode.AUTOMATIC) }
     var sortSearchList by remember { mutableStateOf(false) }
     var emergencyNumber by remember { mutableStateOf("911") }
-    var arduinoIpAddress by remember { mutableStateOf("192.168.137.2") }
+    val arduinoIpAddress by ArduinoConnector.arduinoIpAddress.collectAsState()
+
+    // Effect to show a toast message when the Arduino connects
+    LaunchedEffect(arduinoIpAddress) {
+        if (arduinoIpAddress.isNotBlank()) {
+            playAudioFeedback("Arduino connected at $arduinoIpAddress")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Arduino connected at $arduinoIpAddress", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = { BottomNavigationBar(navController) }
@@ -175,15 +159,13 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?, tcpServer:
                 detector = detector,
                 dangerousItems = dangerousItems,
                 ipAddress = ipAddress,
-                tcpServer = tcpServer,
                 detectionMode = detectionMode,
                 onDetectionModeChange = { detectionMode = it },
                 sortSearchList = sortSearchList,
                 onSortSearchListChange = { sortSearchList = it },
                 emergencyNumber = emergencyNumber,
                 onEmergencyNumberChange = { emergencyNumber = it },
-                arduinoIpAddress = arduinoIpAddress,
-                onArduinoIpAddressChange = { arduinoIpAddress = it }
+                arduinoIpAddress = arduinoIpAddress
             )
         }
     }
@@ -227,22 +209,19 @@ fun Navigation(
     detector: YOLODetector,
     dangerousItems: MutableList<String>,
     ipAddress: String?,
-    tcpServer: TCPServer,
     detectionMode: DetectionMode,
     onDetectionModeChange: (DetectionMode) -> Unit,
     sortSearchList: Boolean,
     onSortSearchListChange: (Boolean) -> Unit,
     emergencyNumber: String,
     onEmergencyNumberChange: (String) -> Unit,
-    arduinoIpAddress: String,
-    onArduinoIpAddressChange: (String) -> Unit
+    arduinoIpAddress: String
 ) {
     NavHost(navController, startDestination = NavigationItem.Home.route) {
         composable(NavigationItem.Home.route) {
             HomeScreen(
                 detector = detector,
                 dangerousItems = dangerousItems,
-                tcpServer = tcpServer,
                 detectionMode = detectionMode,
                 sortSearchList = sortSearchList,
                 emergencyNumber = emergencyNumber,
@@ -260,8 +239,7 @@ fun Navigation(
                 navController = navController,
                 emergencyNumber = emergencyNumber,
                 onEmergencyNumberChange = onEmergencyNumberChange,
-                arduinoIpAddress = arduinoIpAddress,
-                onArduinoIpAddressChange = onArduinoIpAddressChange
+                arduinoIpAddress = arduinoIpAddress
             )
         }
         composable(NavigationItem.Help.route) {
@@ -275,7 +253,6 @@ fun Navigation(
 fun HomeScreen(
     detector: YOLODetector,
     dangerousItems: List<String>,
-    tcpServer: TCPServer,
     detectionMode: DetectionMode,
     sortSearchList: Boolean,
     emergencyNumber: String,
@@ -288,9 +265,9 @@ fun HomeScreen(
     var isPreview by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    LaunchedEffect(tcpServer, showPreview) {
+    LaunchedEffect(showPreview) {
         if (!showPreview) {
-            tcpServer.messages.collect { message ->
+            ArduinoConnector.messages.collect { message ->
                 when (message) {
                     "BUTTON_1_PRESSED" -> {
                         operatingMode = if (operatingMode == OperatingMode.HOUSE) OperatingMode.ROAD else OperatingMode.HOUSE
@@ -385,7 +362,6 @@ fun HomeScreen(
                 isPreview = isPreview,
                 dangerousItems = dangerousItems,
                 initialSelectedItem = selectedItem,
-                tcpServer = tcpServer,
                 arduinoIpAddress = arduinoIpAddress
             )
         }
@@ -395,19 +371,6 @@ fun HomeScreen(
 private fun callEmergency(context: Context, emergencyNumber: String) {
     val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$emergencyNumber"))
     context.startActivity(intent)
-}
-
-suspend fun sendToArduino(ipAddress: String, message: String) {
-    withContext(Dispatchers.IO) {
-        try {
-            val socket = java.net.Socket(ipAddress, 8081)
-            val writer = java.io.PrintWriter(socket.getOutputStream(), true)
-            writer.println(message)
-            socket.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
 }
 
 @Composable
@@ -656,8 +619,7 @@ fun SettingsScreen(
     navController: NavHostController,
     emergencyNumber: String,
     onEmergencyNumberChange: (String) -> Unit,
-    arduinoIpAddress: String,
-    onArduinoIpAddressChange: (String) -> Unit
+    arduinoIpAddress: String
 ) {
     var houseTimeGap by remember { mutableStateOf(1) }
     var roadTimeGap by remember { mutableStateOf(1) }
@@ -720,9 +682,10 @@ fun SettingsScreen(
                     Text("Arduino IP Address", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         value = arduinoIpAddress,
-                        onValueChange = onArduinoIpAddressChange,
+                        onValueChange = {},
                         label = { Text("Arduino IP Address") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true // IP is now auto-detected
                     )
                 }
             }

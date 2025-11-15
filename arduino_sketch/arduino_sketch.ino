@@ -1,16 +1,15 @@
 #include <SPI.h>
 #include <WiFi101.h>
 
-char ssid[] = "NOSTALGIA";      // Your Wi-Fi network SSID
-char pass[] = "lifelife";  // Your Wi-Fi network password
-IPAddress serverIP(192, 168, 137, 213); // The IP address of your Android device
+char ssid[] = "OPPO";      // Your Wi-Fi network SSID
+char pass[] = "23542354";  // Your Wi-Fi network password
+IPAddress serverIP(10, 110, 40, 114); // The IP address of your Android device
 int serverPort = 8080;               // The port the TCP server is listening on
 
-WiFiClient client;
 WiFiServer server(8081);
 
-const int buttonPin1 = 11;
-const int buttonPin2 = 7;
+const int buttonPin1 = 7;
+const int buttonPin2 = 11;
 const int buttonPin3 = 9;
 const int buzzerPin = 8;
 const int DISTANCE_THRESHOLD = 50; // in cm
@@ -27,8 +26,13 @@ bool button2PressedOnce = false;
 bool button3PressedOnce = false;
 const unsigned long doublePressTimeout = 500; // 500ms timeout for double press
 
+unsigned long lastReconnectAttempt = 0;
+bool wifiFirstConnected = false;
+void printWifiStatus(); // Forward declaration
+
 void setup() {
   Serial.begin(9600);
+  Serial.println("Sketch starting... Serial connection is active.");
 
   pinMode(buttonPin1, INPUT_PULLUP);
   pinMode(buttonPin2, INPUT_PULLUP);
@@ -40,13 +44,27 @@ void setup() {
 }
 
 void loop() {
-  // If WiFi is not connected, try to reconnect
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected. Trying to reconnect...");
-    connectToWiFi();
+    if (wifiFirstConnected) { // Only print this message if it was previously connected
+        Serial.println("WiFi disconnected.");
+        wifiFirstConnected = false;
+    }
+    // Non-blocking reconnection attempt
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastReconnectAttempt > 10000) { // Try every 10 seconds
+      lastReconnectAttempt = currentMillis;
+      Serial.println("Attempting to reconnect to WiFi...");
+      WiFi.begin(ssid, pass);
+    }
+  } else {
+    if (!wifiFirstConnected) {
+      wifiFirstConnected = true;
+      Serial.println("\nWiFi connected!");
+      Serial.flush(); // Force send of serial data
+      printWifiStatus(); // This will now also send the IP
+    }
+    handleClient();
   }
-
-  handleClient();
 
   // Read the current state of the buttons
   bool currentButtonState1 = digitalRead(buttonPin1);
@@ -121,7 +139,7 @@ void handleClient() {
         if (line == "DANGER_DETECTED") {
           Serial.println("DANGER DETECTED! Activating buzzer.");
           digitalWrite(buzzerPin, HIGH);
-          delay(1000);
+          delay(5000);
           digitalWrite(buzzerPin, LOW);
         } else {
           // Assuming the message from the ultrasonic sensor is "distance1,distance2"
@@ -156,19 +174,24 @@ void connectToWiFi() {
       Serial.print(".");
     }
   }
-  Serial.println("\nConnected!");
-  printWifiStatus();
+  // The loop() function will now handle printing status and sending IP.
 }
 
 void sendMessage(const char* message) {
-  if (client.connect(serverIP, serverPort)) {
-    client.println(message);
-    Serial.print("Message sent to server: ");
-    Serial.println(message);
-    client.stop();
-  } else {
+  WiFiClient localClient; // Use a local client for each attempt
+
+  while (true) {
+    if (localClient.connect(serverIP, serverPort)) {
+      localClient.println(message);
+      Serial.print("Message sent to server: ");
+      Serial.println(message);
+      localClient.stop();
+      return; // Success
+    }
     Serial.print("Connection to server failed for message: ");
     Serial.println(message);
+    Serial.println("Retrying in 5 second...");
+    delay(5000);
   }
 }
 
@@ -187,4 +210,13 @@ void printWifiStatus() {
   Serial.print("signal strength (RSSI):");
   Serial.print(rssi);
   Serial.println(" dBm");
+
+  Serial.flush(); // Force send of serial data
+
+  // Send the IP address to the server
+  char ipStr[16];
+  sprintf(ipStr, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+  char message[32];
+  sprintf(message, "IP:%s", ipStr);
+  sendMessage(message);
 }

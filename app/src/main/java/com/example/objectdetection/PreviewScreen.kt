@@ -25,6 +25,7 @@ import com.example.objectdetection.TrackedObject
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.PrintWriter
 import java.net.Socket
@@ -43,7 +44,6 @@ fun PreviewScreen(
     isPreview: Boolean,
     dangerousItems: List<String>,
     initialSelectedItem: String,
-    tcpServer: TCPServer,
     arduinoIpAddress: String
 ) {
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
@@ -59,8 +59,8 @@ fun PreviewScreen(
     val screenWidth = LocalContext.current.resources.displayMetrics.widthPixels
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(tcpServer, isPreview) {
-        tcpServer.messages.collect { message ->
+    LaunchedEffect(isPreview) {
+        ArduinoConnector.messages.collect { message ->
             when (message) {
                 "BUTTON_1_PRESSED" -> {
                     if (isPreview) {
@@ -157,7 +157,9 @@ fun PreviewScreen(
 
         // Check for dangerous items and send message to Arduino
         if (detections.any { dangerousItems.contains(getLabel(it.classId)) }) {
-            sendToArduino(arduinoIpAddress, "DANGER_DETECTED")
+            coroutineScope.launch {
+                ArduinoConnector.sendMessage("DANGER_DETECTED")
+            }
         }
     }
 
