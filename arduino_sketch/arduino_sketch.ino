@@ -6,13 +6,12 @@ char pass[] = "23542354";  // Your Wi-Fi network password
 IPAddress serverIP(10, 110, 40, 114); // The IP address of your Android device
 int serverPort = 8080;               // The port the TCP server is listening on
 
-WiFiServer server(8081);
+WiFiClient client;
 
 const int buttonPin1 = 7;
 const int buttonPin2 = 11;
 const int buttonPin3 = 9;
 const int buzzerPin = 8;
-const int DISTANCE_THRESHOLD = 50; // in cm
 
 // Variables to store the last state of the buttons, for edge detection
 unsigned long lastButtonPressTime1 = 0;
@@ -26,13 +25,9 @@ bool button2PressedOnce = false;
 bool button3PressedOnce = false;
 const unsigned long doublePressTimeout = 500; // 500ms timeout for double press
 
-unsigned long lastReconnectAttempt = 0;
-bool wifiFirstConnected = false;
-void printWifiStatus(); // Forward declaration
-
 void setup() {
   Serial.begin(9600);
-  Serial.println("Sketch starting... Serial connection is active.");
+  Serial.println("Button Arduino Sketch Starting...");
 
   pinMode(buttonPin1, INPUT_PULLUP);
   pinMode(buttonPin2, INPUT_PULLUP);
@@ -40,33 +35,39 @@ void setup() {
   pinMode(buzzerPin, OUTPUT);
 
   connectToWiFi();
-  server.begin();
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    if (wifiFirstConnected) { // Only print this message if it was previously connected
-        Serial.println("WiFi disconnected.");
-        wifiFirstConnected = false;
-    }
-    // Non-blocking reconnection attempt
-    unsigned long currentMillis = millis();
-    if (currentMillis - lastReconnectAttempt > 10000) { // Try every 10 seconds
-      lastReconnectAttempt = currentMillis;
-      Serial.println("Attempting to reconnect to WiFi...");
-      WiFi.begin(ssid, pass);
-    }
-  } else {
-    if (!wifiFirstConnected) {
-      wifiFirstConnected = true;
-      Serial.println("\nWiFi connected!");
-      Serial.flush(); // Force send of serial data
-      printWifiStatus(); // This will now also send the IP
-    }
-    handleClient();
+  if (!client.connected()) {
+    connectToServer();
   }
 
-  // Read the current state of the buttons
+  // Handle incoming messages from the server
+  if (client.available()) {
+    String line = client.readStringUntil('\n');
+    line.trim();
+    Serial.print("Received from server: ");
+    Serial.println(line);
+    if (line == "DANGER_DETECTED") {
+      Serial.println("DANGER DETECTED! Activating buzzer for 5 seconds.");
+      digitalWrite(buzzerPin, HIGH);
+      delay(5000);
+      digitalWrite(buzzerPin, LOW);
+    } else if (line == "BUZZ") {
+      Serial.println("BUZZ command received! Activating buzzer for 0.5 seconds.");
+      digitalWrite(buzzerPin, HIGH);
+      delay(500);
+      digitalWrite(buzzerPin, LOW);
+    }
+  }
+
+  // Read the current state of the buttons and send messages
+  handleButtons();
+
+  delay(50); // Debounce delay
+}
+
+void handleButtons() {
   bool currentButtonState1 = digitalRead(buttonPin1);
   bool currentButtonState2 = digitalRead(buttonPin2);
   bool currentButtonState3 = digitalRead(buttonPin3);
@@ -122,47 +123,6 @@ void loop() {
   lastButtonState1 = currentButtonState1;
   lastButtonState2 = currentButtonState2;
   lastButtonState3 = currentButtonState3;
-
-  delay(50); // Debounce delay
-}
-
-void handleClient() {
-  WiFiClient client = server.available();
-  if (client) {
-    Serial.println("New client");
-    while (client.connected()) {
-      if (client.available()) {
-        String line = client.readStringUntil('\n');
-        line.trim();
-        Serial.print("Received: ");
-        Serial.println(line);
-        if (line == "DANGER_DETECTED") {
-          Serial.println("DANGER DETECTED! Activating buzzer.");
-          digitalWrite(buzzerPin, HIGH);
-          delay(5000);
-          digitalWrite(buzzerPin, LOW);
-        } else {
-          // Assuming the message from the ultrasonic sensor is "distance1,distance2"
-          int commaIndex = line.indexOf(',');
-          if (commaIndex > 0) {
-            String distance1Str = line.substring(0, commaIndex);
-            String distance2Str = line.substring(commaIndex + 1);
-            int distance1 = distance1Str.toInt();
-            int distance2 = distance2Str.toInt();
-
-            if (distance1 < DISTANCE_THRESHOLD || distance2 < DISTANCE_THRESHOLD) {
-              Serial.println("Object too close! Activating buzzer.");
-              digitalWrite(buzzerPin, HIGH);
-              delay(500);
-              digitalWrite(buzzerPin, LOW);
-            }
-          }
-        }
-      }
-    }
-    client.stop();
-    Serial.println("Client disconnected");
-  }
 }
 
 void connectToWiFi() {
@@ -174,49 +134,29 @@ void connectToWiFi() {
       Serial.print(".");
     }
   }
-  // The loop() function will now handle printing status and sending IP.
+  Serial.println("\nWiFi connected!");
 }
 
-void sendMessage(const char* message) {
-  WiFiClient localClient; // Use a local client for each attempt
-
-  while (true) {
-    if (localClient.connect(serverIP, serverPort)) {
-      localClient.println(message);
-      Serial.print("Message sent to server: ");
-      Serial.println(message);
-      localClient.stop();
-      return; // Success
+void connectToServer() {
+  while (!client.connected()) {
+    Serial.print("Connecting to server...");
+    if (client.connect(serverIP, serverPort)) {
+      Serial.println(" connected!");
+      // Identify this client to the server
+      client.println("IAM:BUTTON");
+    } else {
+      Serial.println(" failed, retrying in 5 seconds...");
+      delay(5000);
     }
-    Serial.print("Connection to server failed for message: ");
-    Serial.println(message);
-    Serial.println("Retrying in 5 second...");
-    delay(5000);
   }
 }
 
-void printWifiStatus() {
-  // print the SSID of the network you're attached to:
-  Serial.print("SSID: ");
-  Serial.println(WiFi.SSID());
-
-  // print your device's IP address:
-  IPAddress ip = WiFi.localIP();
-  Serial.print("IP Address: ");
-  Serial.println(ip);
-
-  // print the received signal strength:
-  long rssi = WiFi.RSSI();
-  Serial.print("signal strength (RSSI):");
-  Serial.print(rssi);
-  Serial.println(" dBm");
-
-  Serial.flush(); // Force send of serial data
-
-  // Send the IP address to the server
-  char ipStr[16];
-  sprintf(ipStr, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-  char message[32];
-  sprintf(message, "IP:%s", ipStr);
-  sendMessage(message);
+void sendMessage(const char* message) {
+  if (client.connected()) {
+    client.println(message);
+    Serial.print("Message sent to server: ");
+    Serial.println(message);
+  } else {
+    Serial.println("Client not connected. Cannot send message.");
+  }
 }

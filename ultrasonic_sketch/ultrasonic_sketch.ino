@@ -1,57 +1,30 @@
 #include <SPI.h>
 #include <WiFi101.h>
 
-char ssid[] = "NOSTALGIA";      // Your Wi-Fi network SSID
-char pass[] = "lifelife";  // Your Wi-Fi network password
-IPAddress buttonArduinoIP(192, 168, 137, 104); // The IP address of your ButtonArduino
-int buttonArduinoPort = 8081;
+char ssid[] = "OPPO";      // Your Wi-Fi network SSID
+char pass[] = "23542354";  // Your Wi-Fi network password
+IPAddress serverIP(10, 110, 40, 114); // The IP address of your Android device
+int serverPort = 8080;               // The port the TCP server is listening on
 
 WiFiClient client;
 
-const int triggerPin1 = 4;
-const int echoPin1 = 4;
-const int triggerPin2 = 5;
-const int echoPin2 = 5;
+const int sensorPin1 = 4; // 3-pin sensor: same pin for trigger and echo
+const int sensorPin2 = 5; // 3-pin sensor: same pin for trigger and echo
 
 unsigned long lastReadTime = 0;
 const unsigned long readInterval = 100; // 100ms
-
-long readUltrasonicDistance(int triggerPin, int echoPin) {
-  pinMode(triggerPin, OUTPUT);
-  digitalWrite(triggerPin, LOW);
-  delayMicroseconds(2);
-
-  digitalWrite(triggerPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(triggerPin, LOW);
-
-  pinMode(echoPin, INPUT);
-  return pulseIn(echoPin, HIGH); // Duration in microseconds
-}
+const int DISTANCE_THRESHOLD = 50; // in cm
 
 void setup() {
   Serial.begin(9600);
+  Serial.println("Ultrasonic Arduino Sketch Starting...");
 
-  // Connect to Wi-Fi
-  Serial.print("Connecting to Wi-Fi");
-  while (WiFi.begin(ssid, pass) != WL_CONNECTED) {
-    delay(1000);
-    Serial.print(".");
-  }
-  Serial.println("\nConnected!");
+  connectToWiFi();
 }
 
 void loop() {
-  // Connect to server if not connected
   if (!client.connected()) {
-    Serial.println("Connecting to ButtonArduino...");
-    if (client.connect(buttonArduinoIP, buttonArduinoPort)) {
-      Serial.println("Connected to ButtonArduino!");
-    } else {
-      Serial.println("Connection failed, retrying...");
-      delay(2000);
-      return;
-    }
+    connectToServer();
   }
 
   // Read sensors at intervals
@@ -59,29 +32,69 @@ void loop() {
   if (currentTime - lastReadTime >= readInterval) {
     lastReadTime = currentTime;
 
-    // Read pulse time
-    long duration1 = readUltrasonicDistance(triggerPin1, echoPin1);
-    long duration2 = readUltrasonicDistance(triggerPin2, echoPin2);
+    long duration1 = readUltrasonicDistance(sensorPin1);
+    long duration2 = readUltrasonicDistance(sensorPin2);
 
-    // Convert duration to cm (speed of sound: 343 m/s)
     int distance1 = duration1 * 0.01723; // cm
     int distance2 = duration2 * 0.01723; // cm
 
-    // Send to server
-    String cmd = String(distance1) + "," + String(distance2);
-    client.println(cmd);
-
-    Serial.print("Sent command: ");
-    Serial.println(cmd);
+    // Only send a message if an object is too close
+    if (distance1 < DISTANCE_THRESHOLD || distance2 < DISTANCE_THRESHOLD) {
+      sendMessage("DANGER");
+    }
   }
 
-  // Check server response
+  // We don't expect any messages from the server in this version, so just flush the buffer.
   if (client.available()) {
-    String response = client.readStringUntil('\n');
-    response.trim();
-    if (response.length() > 0) {
-      Serial.print("Server: ");
-      Serial.println(response);
+    client.flush();
+  }
+
+  delay(50);
+}
+
+long readUltrasonicDistance(int sensorPin) {
+  pinMode(sensorPin, OUTPUT);
+  digitalWrite(sensorPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(sensorPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(sensorPin, LOW);
+  pinMode(sensorPin, INPUT);
+  return pulseIn(sensorPin, HIGH);
+}
+
+void connectToWiFi() {
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(ssid, pass);
+    for (int i = 0; i < 10 && WiFi.status() != WL_CONNECTED; i++) {
+      delay(1000);
+      Serial.print(".");
     }
+  }
+  Serial.println("\nWiFi connected!");
+}
+
+void connectToServer() {
+  while (!client.connected()) {
+    Serial.print("Connecting to server...");
+    if (client.connect(serverIP, serverPort)) {
+      Serial.println(" connected!");
+      // Identify this client to the server
+      client.println("IAM:ULTRASONIC");
+    } else {
+      Serial.println(" failed, retrying in 5 seconds...");
+      delay(5000);
+    }
+  }
+}
+
+void sendMessage(const char* message) {
+  if (client.connected()) {
+    client.println(message);
+    Serial.print("Message sent to server: ");
+    Serial.println(message);
+  } else {
+    Serial.println("Client not connected. Cannot send message.");
   }
 }

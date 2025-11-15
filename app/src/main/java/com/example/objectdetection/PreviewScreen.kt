@@ -43,8 +43,7 @@ fun PreviewScreen(
     onDismiss: () -> Unit,
     isPreview: Boolean,
     dangerousItems: List<String>,
-    initialSelectedItem: String,
-    arduinoIpAddress: String
+    initialSelectedItem: String
 ) {
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
     var selectedItem by remember { mutableStateOf(initialSelectedItem) }
@@ -116,51 +115,69 @@ fun PreviewScreen(
     }
 
     LaunchedEffect(detections, selectedItem) {
+        val allTransformedBoxes = detections.map {
+            transformCoordinates(
+                det = it,
+                srcWidth = 640,
+                srcHeight = 640,
+                rotationDegrees = rotationDegrees,
+                targetWidth = screenWidth.toFloat(),
+                targetHeight = screenWidth.toFloat()
+            ) to it
+        }
+
+        val newTrackedObjects = allTransformedBoxes.map { (box, det) ->
+            TrackedObject.fromTransformedBox(box, det)
+        }
+
+        val tolerance = screenWidth / 3f
+        val objectsToAnnounce = allTransformedBoxes.filter { (box, det) ->
+            val newObj = TrackedObject.fromTransformedBox(box, det)
+            trackedObjects.none { oldObj ->
+                val distance = kotlin.math.sqrt(
+                    (newObj.centerX - oldObj.centerX).pow(2) + (newObj.centerY - oldObj.centerY).pow(2)
+                )
+                oldObj.classId == newObj.classId && distance < tolerance
+            }
+        }
+
+        val announcements = mutableListOf<String>()
+
+        // Announce dangerous items
+        val dangerousObjects = objectsToAnnounce.filter { (box, det) ->
+            dangerousItems.contains(getLabel(det.classId))
+        }
+        if (dangerousObjects.isNotEmpty()) {
+            coroutineScope.launch {
+                ArduinoConnector.sendMessage("BUTTON", "DANGER_DETECTED")
+            }
+            val messages = dangerousObjects.map { (box, det) ->
+                val label = getLabel(det.classId)
+                "Danger, I see a $label ${box.direction}"
+            }
+            announcements.addAll(messages)
+        }
+
+        // Announce selected item in search mode
         if (!isPreview) {
-            val foundDetections = detections.filter { getLabel(it.classId) == selectedItem }
-            val transformedBoxes = foundDetections.map {
-                transformCoordinates(
-                    det = it,
-                    srcWidth = 640,
-                    srcHeight = 640,
-                    rotationDegrees = rotationDegrees,
-                    targetWidth = screenWidth.toFloat(),
-                    targetHeight = screenWidth.toFloat()
-                ) to it
+            val selectedObjects = objectsToAnnounce.filter { (box, det) ->
+                getLabel(det.classId) == selectedItem && !dangerousItems.contains(getLabel(det.classId))
             }
-
-            val newTrackedObjects = transformedBoxes.map { (box, det) ->
-                TrackedObject.fromTransformedBox(box, det)
-            }
-
-            val tolerance = screenWidth / 3f
-            val objectsToAnnounce = transformedBoxes.filter { (box, det) ->
-                val newObj = TrackedObject.fromTransformedBox(box, det)
-                trackedObjects.none { oldObj ->
-                    val distance = kotlin.math.sqrt(
-                        (newObj.centerX - oldObj.centerX).pow(2) + (newObj.centerY - oldObj.centerY).pow(2)
-                    )
-                    oldObj.classId == newObj.classId && distance < tolerance
-                }
-            }
-
-            if (objectsToAnnounce.isNotEmpty()) {
-                val messages = objectsToAnnounce.map { (box, det) ->
+            if (selectedObjects.isNotEmpty()) {
+                val messages = selectedObjects.map { (box, det) ->
                     val label = getLabel(det.classId)
                     "I see a $label ${box.direction}"
                 }
-                val finalMessage = messages.joinToString(separator = ". ")
-                tts.speak(finalMessage, TextToSpeech.QUEUE_FLUSH, null, null)
+                announcements.addAll(messages)
             }
-            trackedObjects = newTrackedObjects
         }
 
-        // Check for dangerous items and send message to Arduino
-        if (detections.any { dangerousItems.contains(getLabel(it.classId)) }) {
-            coroutineScope.launch {
-                ArduinoConnector.sendMessage("DANGER_DETECTED")
-            }
+        if (announcements.isNotEmpty()) {
+            val finalMessage = announcements.joinToString(separator = ". ")
+            tts.speak(finalMessage, TextToSpeech.QUEUE_FLUSH, null, null)
         }
+
+        trackedObjects = newTrackedObjects
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

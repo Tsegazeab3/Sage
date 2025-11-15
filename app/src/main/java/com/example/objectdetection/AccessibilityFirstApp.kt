@@ -138,17 +138,6 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?) {
     var detectionMode by remember { mutableStateOf(DetectionMode.AUTOMATIC) }
     var sortSearchList by remember { mutableStateOf(false) }
     var emergencyNumber by remember { mutableStateOf("911") }
-    val arduinoIpAddress by ArduinoConnector.arduinoIpAddress.collectAsState()
-
-    // Effect to show a toast message when the Arduino connects
-    LaunchedEffect(arduinoIpAddress) {
-        if (arduinoIpAddress.isNotBlank()) {
-            playAudioFeedback("Arduino connected at $arduinoIpAddress")
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Arduino connected at $arduinoIpAddress", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
 
     Scaffold(
         bottomBar = { BottomNavigationBar(navController) }
@@ -164,8 +153,7 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?) {
                 sortSearchList = sortSearchList,
                 onSortSearchListChange = { sortSearchList = it },
                 emergencyNumber = emergencyNumber,
-                onEmergencyNumberChange = { emergencyNumber = it },
-                arduinoIpAddress = arduinoIpAddress
+                onEmergencyNumberChange = { emergencyNumber = it }
             )
         }
     }
@@ -214,8 +202,7 @@ fun Navigation(
     sortSearchList: Boolean,
     onSortSearchListChange: (Boolean) -> Unit,
     emergencyNumber: String,
-    onEmergencyNumberChange: (String) -> Unit,
-    arduinoIpAddress: String
+    onEmergencyNumberChange: (String) -> Unit
 ) {
     NavHost(navController, startDestination = NavigationItem.Home.route) {
         composable(NavigationItem.Home.route) {
@@ -224,8 +211,7 @@ fun Navigation(
                 dangerousItems = dangerousItems,
                 detectionMode = detectionMode,
                 sortSearchList = sortSearchList,
-                emergencyNumber = emergencyNumber,
-                arduinoIpAddress = arduinoIpAddress
+                emergencyNumber = emergencyNumber
             )
         }
         composable(NavigationItem.Settings.route) {
@@ -238,8 +224,7 @@ fun Navigation(
                 onSortSearchListChange = onSortSearchListChange,
                 navController = navController,
                 emergencyNumber = emergencyNumber,
-                onEmergencyNumberChange = onEmergencyNumberChange,
-                arduinoIpAddress = arduinoIpAddress
+                onEmergencyNumberChange = onEmergencyNumberChange
             )
         }
         composable(NavigationItem.Help.route) {
@@ -255,8 +240,7 @@ fun HomeScreen(
     dangerousItems: List<String>,
     detectionMode: DetectionMode,
     sortSearchList: Boolean,
-    emergencyNumber: String,
-    arduinoIpAddress: String
+    emergencyNumber: String
 ) {
     var operatingMode by remember { mutableStateOf(OperatingMode.HOUSE) }
     val backgroundColor = if (operatingMode == OperatingMode.HOUSE) HouseModeGreen.copy(alpha = 0.1f) else RoadModeBlue.copy(alpha = 0.1f)
@@ -361,8 +345,7 @@ fun HomeScreen(
                 onDismiss = { showPreview = false },
                 isPreview = isPreview,
                 dangerousItems = dangerousItems,
-                initialSelectedItem = selectedItem,
-                arduinoIpAddress = arduinoIpAddress
+                initialSelectedItem = selectedItem
             )
         }
     }
@@ -618,8 +601,7 @@ fun SettingsScreen(
     onSortSearchListChange: (Boolean) -> Unit,
     navController: NavHostController,
     emergencyNumber: String,
-    onEmergencyNumberChange: (String) -> Unit,
-    arduinoIpAddress: String
+    onEmergencyNumberChange: (String) -> Unit
 ) {
     var houseTimeGap by remember { mutableStateOf(1) }
     var roadTimeGap by remember { mutableStateOf(1) }
@@ -663,29 +645,6 @@ fun SettingsScreen(
                         onValueChange = onEmergencyNumberChange,
                         label = { Text("Emergency Number") },
                         modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-        item {
-            Card(
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("Arduino IP Address", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
-                        value = arduinoIpAddress,
-                        onValueChange = {},
-                        label = { Text("Arduino IP Address") },
-                        modifier = Modifier.fillMaxWidth(),
-                        readOnly = true // IP is now auto-detected
                     )
                 }
             }
