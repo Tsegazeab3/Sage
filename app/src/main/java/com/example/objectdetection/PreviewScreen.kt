@@ -3,7 +3,6 @@ package com.example.objectdetection
 import android.graphics.RectF
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.geometry.Offset
@@ -196,48 +194,14 @@ fun PreviewScreen(
                 )
             }
             Camera.ESP32 -> {
-                val receiver = remember { UdpStreamReceiver() }
-                val bitmap by receiver.bitmapFlow.collectAsState()
-
-                DisposableEffect(Unit) {
-                    receiver.start()
-                    onDispose {
-                        receiver.stop()
-                    }
-                }
-
-                LaunchedEffect(bitmap) {
-                    bitmap?.let {
-                        // Run detection in a background thread
-                        withContext(Dispatchers.Default) {
-                            val result = detector.detect(it)
-                            // Post result back to the main thread
-                            withContext(Dispatchers.Main) {
-                                detections = result
-                                rotationDegrees = 0 // Rotation is 0 for the ESP32 stream
-                            }
+                CameraScreen(onFrame = { bitmap ->
+                    coroutineScope.launch(Dispatchers.Default) {
+                        val result = detector.detect(bitmap)
+                        withContext(Dispatchers.Main) {
+                            detections = result
                         }
                     }
-                }
-
-                Box(modifier = Modifier.fillMaxSize()) {
-                    bitmap?.let {
-                        Image(
-                            bitmap = it.asImageBitmap(),
-                            contentDescription = "ESP32 UDP Stream",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } ?: run {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator()
-                            Text("Waiting for UDP stream on port 44444...")
-                        }
-                    }
-                }
+                })
             }
         }
         Canvas(modifier = Modifier.fillMaxSize()) {

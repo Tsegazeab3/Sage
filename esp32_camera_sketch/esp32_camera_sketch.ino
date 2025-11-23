@@ -1,12 +1,24 @@
 #include "esp_camera.h"
 #include <WiFi.h>
-#include <WiFiUdp.h>
-#include "soc/soc.h" // For disabling brownout detector
-#include "soc/rtc_cntl_reg.h" // For disabling brownout detector
+#include <ESPmDNS.h>
+#include "esp_http_server.h"
+#include "esp_timer.h"
+#include "esp_camera.h"
+#include "img_converters.h"
+#include "fb_gfx.h"
+#include "soc/soc.h" //disable brownout problems
+#include "soc/rtc_cntl_reg.h"  //disable brownout problems
+#include "driver/rtc_io.h"
 
-// Your WiFi credentials
-const char* ssid = "aurak-residence";
-const char* password = "8R3s!de@aurak8";
+// Set your WiFi credentials
+const char* ssid = "OPPO";
+const char* password = "23542354";
+
+// Set a fixed IP address
+// IPAddress local_IP(192, 168, 1, 100);
+// IPAddress gateway(192, 168, 1, 1);
+// IPAddress subnet(255, 255, 255, 0);
+
 
 // Pin definition for AI-THINKER ESP32-CAM
 #define PWDN_GPIO_NUM     32
@@ -27,15 +39,86 @@ const char* password = "8R3s!de@aurak8";
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-// UDP settings
-WiFiUDP udp;
-IPAddress broadcastIP;
-const int udpPort = 44444;
+#define PART_BOUNDARY "123456789000000000000987654321"
+static const char* _STREAM_CONTENT_TYPE = "multipart/x-mixed-replace;boundary=" PART_BOUNDARY;
+static const char* _STREAM_BOUNDARY = "\r\n--" PART_BOUNDARY "\r\n";
+static const char* _STREAM_PART = "Content-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n";
 
-// Define a safe payload size, leaving room for IP/UDP headers to avoid fragmentation
-#define MAX_PACKET_SIZE 1400 
+httpd_handle_t stream_httpd = NULL;
 
-uint16_t frame_id = 0;
+static esp_err_t stream_handler(httpd_req_t *req){
+  camera_fb_t * fb = NULL;
+  esp_err_t res = ESP_OK;
+  size_t _jpg_buf_len = 0;
+  uint8_t * _jpg_buf = NULL;
+  char * part_buf[64];
+
+  res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
+  if(res != ESP_OK){
+    return res;
+  }
+
+  while(true){
+    fb = esp_camera_fb_get();
+    if (!fb) {
+      Serial.println("Camera capture failed");
+      res = ESP_FAIL;
+    } else {
+      if(fb->format != PIXFORMAT_JPEG){
+        bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
+        esp_camera_fb_return(fb);
+        fb = NULL;
+        if(!jpeg_converted){
+          Serial.println("JPEG compression failed");
+          res = ESP_FAIL;
+        }
+      } else {
+        _jpg_buf_len = fb->len;
+        _jpg_buf = fb->buf;
+      }
+    }
+    if(res == ESP_OK){
+      size_t hlen = snprintf((char *)part_buf, 64, _STREAM_PART, _jpg_buf_len);
+      res = httpd_resp_send_chunk(req, (const char *)part_buf, hlen);
+    }
+    if(res == ESP_OK){
+      res = httpd_resp_send_chunk(req, (const char *)_jpg_buf, _jpg_buf_len);
+    }
+    if(res == ESP_OK){
+      res = httpd_resp_send_chunk(req, _STREAM_BOUNDARY, strlen(_STREAM_BOUNDARY));
+    }
+    if(fb){
+      esp_camera_fb_return(fb);
+      fb = NULL;
+      _jpg_buf = NULL;
+    } else if(_jpg_buf){
+      free(_jpg_buf);
+      _jpg_buf = NULL;
+    }
+    if(res != ESP_OK){
+      break;
+    }
+    // Add a non-blocking delay to control the frame rate
+    vTaskDelay(200 / portTICK_PERIOD_MS); // Approximately 5 FPS
+  }
+  return res;
+}
+
+void startCameraServer(){
+  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  config.server_port = 81; // The stream will be on port 81
+
+  httpd_uri_t stream_uri = {
+    .uri       = "/stream",
+    .method    = HTTP_GET,
+    .handler   = stream_handler,
+    .user_ctx  = NULL
+  };
+
+  if (httpd_start(&stream_httpd, &config) == ESP_OK) {
+    httpd_register_uri_handler(stream_httpd, &stream_uri);
+  }
+}
 
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
@@ -44,6 +127,9 @@ void setup() {
   Serial.println();
 
   // Connect to Wi-Fi
+  // if (!WiFi.config(local_IP, gateway, subnet)) {
+  //   Serial.println("STA Failed to configure");
+  // }
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -51,13 +137,19 @@ void setup() {
   }
   Serial.println("");
   Serial.println("WiFi connected");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
+  
+  Serial.print("Camera Stream Ready! Go to: http://");
+  Serial.print(WiFi.localIP());
+  Serial.println(":81/stream");
 
-  // Calculate broadcast IP
-  broadcastIP = WiFi.localIP() | ~WiFi.subnetMask();
-  Serial.print("Broadcast IP: ");
-  Serial.println(broadcastIP);
+  if (!MDNS.begin("esp32-camera")) {
+    Serial.println("Error setting up MDNS responder!");
+    while(1) {
+      delay(1000);
+    }
+  }
+  Serial.println("mDNS responder started");
+  MDNS.addService("http", "tcp", 81);
 
   // Camera configuration
   camera_config_t config;
@@ -81,9 +173,12 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
+
+  // Frame size
   config.frame_size = FRAMESIZE_VGA; // 640x480
-  config.jpeg_quality = 15; // 0-63, 0 is best quality
-  config.fb_count = 1;
+  // For JPEG, 0 is the best quality, 63 is the worst.
+  config.jpeg_quality = 15;
+  config.fb_count = 2;
 
   // Camera init
   esp_err_t err = esp_camera_init(&config);
@@ -91,41 +186,12 @@ void setup() {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
+
+  // Start video stream
+  startCameraServer();
 }
 
 void loop() {
-  camera_fb_t * fb = NULL;
-  
-  fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("Camera capture failed");
-    return;
-  }
-
-  // --- UDP Frame Fragmentation and Sending Logic ---
-  size_t total_packets = (fb->len + MAX_PACKET_SIZE - 1) / MAX_PACKET_SIZE;
-
-  for (size_t i = 0; i < total_packets; i++) {
-    size_t offset = i * MAX_PACKET_SIZE;
-    size_t chunk_size = (i == total_packets - 1) ? (fb->len - offset) : MAX_PACKET_SIZE;
-
-    // 4-byte header: frame_id (2 bytes), packet_num (1 byte), total_packets (1 byte)
-    uint8_t header[4];
-    header[0] = (frame_id >> 8) & 0xFF; // Frame ID High Byte
-    header[1] = frame_id & 0xFF;        // Frame ID Low Byte
-    header[2] = (uint8_t)i;             // Packet Number
-    header[3] = (uint8_t)total_packets; // Total Packets
-
-    udp.beginPacket(broadcastIP, udpPort);
-    udp.write(header, 4);
-    udp.write(fb->buf + offset, chunk_size);
-    udp.endPacket();
-  }
-
-  frame_id++;
-  
-  esp_camera_fb_return(fb);
-
-  // Delay for frame rate control
-  vTaskDelay(200 / portTICK_PERIOD_MS); // Approximately 2.5 FPS
+  // put your main code here, to run repeatedly:
+  delay(10000);
 }
