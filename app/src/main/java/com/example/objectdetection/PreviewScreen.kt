@@ -43,7 +43,8 @@ fun PreviewScreen(
     onDismiss: () -> Unit,
     isPreview: Boolean,
     dangerousItems: List<String>,
-    initialSelectedItem: String
+    initialSelectedItem: String,
+    selectedCamera: Camera
 ) {
     var detections by remember { mutableStateOf<List<DetectionResult>>(emptyList()) }
     var selectedItem by remember { mutableStateOf(initialSelectedItem) }
@@ -181,10 +182,28 @@ fun PreviewScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        CameraPreview(detector = detector, selectedObject = selectedItem, onDetections = { dets, rotation ->
-            detections = dets
-            rotationDegrees = rotation
-        })
+        when (selectedCamera) {
+            Camera.PHONE -> {
+                CameraPreview(
+                    detector = detector,
+                    selectedObject = selectedItem,
+                    onDetections = { dets, rotation ->
+                        detections = dets
+                        rotationDegrees = rotation
+                    }
+                )
+            }
+            Camera.ESP32 -> {
+                CameraScreen(onFrame = { bitmap ->
+                    coroutineScope.launch(Dispatchers.Default) {
+                        val result = detector.detect(bitmap)
+                        withContext(Dispatchers.Main) {
+                            detections = result
+                        }
+                    }
+                })
+            }
+        }
         Canvas(modifier = Modifier.fillMaxSize()) {
             detections.forEach { det ->
                 val label = getLabel(det.classId)

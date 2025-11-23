@@ -138,6 +138,7 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?) {
     var detectionMode by remember { mutableStateOf(DetectionMode.AUTOMATIC) }
     var sortSearchList by remember { mutableStateOf(false) }
     var emergencyNumber by remember { mutableStateOf("911") }
+    var selectedCamera by remember { mutableStateOf(Camera.PHONE) }
 
     Scaffold(
         bottomBar = { BottomNavigationBar(navController) }
@@ -153,7 +154,9 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?) {
                 sortSearchList = sortSearchList,
                 onSortSearchListChange = { sortSearchList = it },
                 emergencyNumber = emergencyNumber,
-                onEmergencyNumberChange = { emergencyNumber = it }
+                onEmergencyNumberChange = { emergencyNumber = it },
+                selectedCamera = selectedCamera,
+                onCameraChange = { selectedCamera = it }
             )
         }
     }
@@ -202,7 +205,9 @@ fun Navigation(
     sortSearchList: Boolean,
     onSortSearchListChange: (Boolean) -> Unit,
     emergencyNumber: String,
-    onEmergencyNumberChange: (String) -> Unit
+    onEmergencyNumberChange: (String) -> Unit,
+    selectedCamera: Camera,
+    onCameraChange: (Camera) -> Unit
 ) {
     NavHost(navController, startDestination = NavigationItem.Home.route) {
         composable(NavigationItem.Home.route) {
@@ -211,7 +216,8 @@ fun Navigation(
                 dangerousItems = dangerousItems,
                 detectionMode = detectionMode,
                 sortSearchList = sortSearchList,
-                emergencyNumber = emergencyNumber
+                emergencyNumber = emergencyNumber,
+                selectedCamera = selectedCamera
             )
         }
         composable(NavigationItem.Settings.route) {
@@ -224,7 +230,9 @@ fun Navigation(
                 onSortSearchListChange = onSortSearchListChange,
                 navController = navController,
                 emergencyNumber = emergencyNumber,
-                onEmergencyNumberChange = onEmergencyNumberChange
+                onEmergencyNumberChange = onEmergencyNumberChange,
+                selectedCamera = selectedCamera,
+                onCameraChange = onCameraChange
             )
         }
         composable(NavigationItem.Help.route) {
@@ -240,7 +248,8 @@ fun HomeScreen(
     dangerousItems: List<String>,
     detectionMode: DetectionMode,
     sortSearchList: Boolean,
-    emergencyNumber: String
+    emergencyNumber: String,
+    selectedCamera: Camera
 ) {
     var operatingMode by remember { mutableStateOf(OperatingMode.HOUSE) }
     val backgroundColor = if (operatingMode == OperatingMode.HOUSE) HouseModeGreen.copy(alpha = 0.1f) else RoadModeBlue.copy(alpha = 0.1f)
@@ -345,7 +354,8 @@ fun HomeScreen(
                 onDismiss = { showPreview = false },
                 isPreview = isPreview,
                 dangerousItems = dangerousItems,
-                initialSelectedItem = selectedItem
+                initialSelectedItem = selectedItem,
+                selectedCamera = selectedCamera
             )
         }
     }
@@ -601,12 +611,13 @@ fun SettingsScreen(
     onSortSearchListChange: (Boolean) -> Unit,
     navController: NavHostController,
     emergencyNumber: String,
-    onEmergencyNumberChange: (String) -> Unit
+    onEmergencyNumberChange: (String) -> Unit,
+    selectedCamera: Camera,
+    onCameraChange: (Camera) -> Unit
 ) {
     var houseTimeGap by remember { mutableStateOf(1) }
     var roadTimeGap by remember { mutableStateOf(1) }
     val timeGaps = listOf(1, 2, 3, 4, 5)
-    var selectedCamera by remember { mutableStateOf(Camera.PHONE) }
     var showDangerousItemsPopup by remember { mutableStateOf(false) }
     var sortDangerousItems by remember { mutableStateOf(false) }
 
@@ -735,7 +746,7 @@ fun SettingsScreen(
             CameraSelection(
                 selectedCamera = selectedCamera,
                 onCameraSelected = {
-                    selectedCamera = it
+                    onCameraChange(it)
                     playAudioFeedback("Selected ${if (it == Camera.PHONE) "Phone" else "ESP32"} Camera.")
                 }
             )
