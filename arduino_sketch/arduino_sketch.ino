@@ -3,7 +3,7 @@
 
 char ssid[] = "OPPO";      // Your Wi-Fi network SSID
 char pass[] = "23542354";  // Your Wi-Fi network password
-IPAddress serverIP(10, 110, 40, 114); // The IP address of your Android device
+IPAddress serverIP(172, 24, 203, 114); // The IP address of your Android device
 int serverPort = 8080;               // The port the TCP server is listening on
 
 WiFiClient client;
@@ -11,7 +11,7 @@ WiFiClient client;
 const int buttonPin1 = 7;
 const int buttonPin2 = 11;
 const int buttonPin3 = 9;
-const int buzzerPin = 8;
+const int buzzerPin = 1;
 
 // Variables to store the last state of the buttons, for edge detection
 unsigned long lastButtonPressTime1 = 0;
@@ -51,7 +51,7 @@ void loop() {
     if (line == "DANGER_DETECTED") {
       Serial.println("DANGER DETECTED! Activating buzzer for 5 seconds.");
       digitalWrite(buzzerPin, HIGH);
-      delay(5000);
+      delay(1000);
       digitalWrite(buzzerPin, LOW);
     } else if (line == "BUZZ") {
       Serial.println("BUZZ command received! Activating buzzer for 0.5 seconds.");

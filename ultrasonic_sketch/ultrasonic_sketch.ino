@@ -3,7 +3,7 @@
 
 char ssid[] = "OPPO";      // Your Wi-Fi network SSID
 char pass[] = "23542354";  // Your Wi-Fi network password
-IPAddress serverIP(10, 110, 40, 114); // The IP address of your Android device
+IPAddress serverIP(172,24,203, 114); // The IP address of your Android device
 int serverPort = 8080;               // The port the TCP server is listening on
 
 WiFiClient client;
