@@ -11,8 +11,8 @@
 #include "driver/rtc_io.h"
 
 // Set your WiFi credentials
-const char* ssid = "OPPO";
-const char* password = "23542354";
+const char* ssid = "aurak-residence";
+const char* password = "8R3s!de@aurak8";
 
 // Set a fixed IP address
 // IPAddress local_IP(192, 168, 1, 100);
@@ -99,7 +99,7 @@ static esp_err_t stream_handler(httpd_req_t *req){
       break;
     }
     // Add a non-blocking delay to control the frame rate
-    vTaskDelay(200 / portTICK_PERIOD_MS); // Approximately 5 FPS
+    vTaskDelay(100 / portTICK_PERIOD_MS); // Approximately 10 FPS
   }
   return res;
 }
@@ -178,7 +178,7 @@ void setup() {
   config.frame_size = FRAMESIZE_VGA; // 640x480
   // For JPEG, 0 is the best quality, 63 is the worst.
   config.jpeg_quality = 15;
-  config.fb_count = 2;
+  config.fb_count = 1;
 
   // Camera init
   esp_err_t err = esp_camera_init(&config);
