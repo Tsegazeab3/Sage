@@ -59,12 +59,8 @@ fun PreviewScreen(
     var rotationDegrees by remember { mutableStateOf(0) }
     var trackedObjects by remember { mutableStateOf<List<TrackedObject>>(emptyList()) }
     val screenWidth = LocalContext.current.resources.displayMetrics.widthPixels
+    val screenHeight = LocalContext.current.resources.displayMetrics.heightPixels
     val coroutineScope = rememberCoroutineScope()
-    var settings by remember { mutableStateOf(Settings()) }
-
-    LaunchedEffect(settings) {
-        ArduinoConnector.sendThresholds(settings)
-    }
 
     LaunchedEffect(isPreview) {
         ArduinoConnector.messages.collect { message ->
@@ -76,6 +72,7 @@ fun PreviewScreen(
                         val currentIndex = HOUSE_CLASSES.indexOf(selectedItem)
                         val nextIndex = if (currentIndex > 0) currentIndex - 1 else HOUSE_CLASSES.size - 1
                         selectedItem = HOUSE_CLASSES[nextIndex]
+                        tts.speak(selectedItem, TextToSpeech.QUEUE_FLUSH, null, null)
                     }
                 }
                 "BUTTON_2_PRESSED" -> {
@@ -85,6 +82,7 @@ fun PreviewScreen(
                         val currentIndex = HOUSE_CLASSES.indexOf(selectedItem)
                         val nextIndex = if (currentIndex < HOUSE_CLASSES.size - 1) currentIndex + 1 else 0
                         selectedItem = HOUSE_CLASSES[nextIndex]
+                        tts.speak(selectedItem, TextToSpeech.QUEUE_FLUSH, null, null)
                     }
                 }
                 "BUTTON_3_PRESSED" -> {
@@ -103,21 +101,29 @@ fun PreviewScreen(
                     srcHeight = 640,
                     rotationDegrees = rotationDegrees,
                     targetWidth = screenWidth.toFloat(),
-                    targetHeight = screenWidth.toFloat() // Assuming a square preview for simplicity
+                    targetHeight = screenHeight.toFloat()
                 )
             }
-            val groupedDetections = transformedBoxes.groupBy { it.labelText.substringBefore(" ") }
-            val messages = groupedDetections.map { (label, boxes) ->
-                val count = boxes.size
-                val direction = boxes.first().direction
-                if (count > 1) {
-                    "I see $count ${label}s $direction"
-                } else {
-                    "I see a $label $direction"
+            // Group by label first, then by direction
+            val groupedByLabel = transformedBoxes.groupBy { it.labelText.substringBefore(" ") }
+            val messages = groupedByLabel.map { (label, boxes) ->
+                val groupedByDirection = boxes.groupBy { it.direction }
+                val directionMessages = groupedByDirection.map { (direction, dirBoxes) ->
+                    val count = dirBoxes.size
+                    if (count > 1) {
+                        "$count ${label}s $direction"
+                    } else {
+                        "a $label $direction"
+                    }
                 }
+                directionMessages.joinToString(separator = " and ")
             }
-            val finalMessage = messages.joinToString(separator = ". ")
-            tts.speak(finalMessage, TextToSpeech.QUEUE_FLUSH, null, null)
+            if (messages.isNotEmpty()) {
+                val finalMessage = "I see " + messages.joinToString(separator = ". ")
+                tts.speak(finalMessage, TextToSpeech.QUEUE_FLUSH, null, null)
+            } else {
+                Log.d("PreviewScreen", "No objects detected.")
+            }
             triggerSpeak = false
         }
     }
@@ -130,7 +136,7 @@ fun PreviewScreen(
                 srcHeight = 640,
                 rotationDegrees = rotationDegrees,
                 targetWidth = screenWidth.toFloat(),
-                targetHeight = screenWidth.toFloat()
+                targetHeight = screenHeight.toFloat()
             ) to it
         }
 
@@ -251,29 +257,6 @@ fun PreviewScreen(
                         onCheckedChange = { highlightAll = it }
                     )
                 }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Bottom
-                ) {
-                    Text("Front Distance Threshold: ${settings.frontDistanceThreshold.format(2)} cm")
-                    Slider(
-                        value = settings.frontDistanceThreshold,
-                        onValueChange = { settings = settings.copy(frontDistanceThreshold = it) },
-                        valueRange = 0f..500f
-                    )
-                    Text("Overhead Distance Threshold: ${settings.overheadDistanceThreshold.format(2)} cm")
-                    Slider(
-                        value = settings.overheadDistanceThreshold,
-                        onValueChange = { settings = settings.copy(overheadDistanceThreshold = it) },
-                        valueRange = 0f..500f
-                    )
-                    Button(onClick = {
-                        ArduinoConnector.sendThresholds(settings)
-                    }) {
-                        Text("Send Settings")
-                    }
-                }
                 Button(onClick = { triggerSpeak = true }) {
                     Text("Trigger Detection")
                 }
@@ -292,4 +275,3 @@ fun PreviewScreen(
         }
     }
 }
-private fun Float.format(digits: Int) = "%.${digits}f".format(this)

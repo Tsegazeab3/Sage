@@ -72,7 +72,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             ObjectDetectionTheme {
                 if (hasCameraPermission) {
-                    AccessibilityFirstApp(detector = detector, ipAddress = ipAddress)
+                    var settings by remember { mutableStateOf(Settings()) }
+
+                    LaunchedEffect(settings) {
+                        ArduinoConnector.sendThresholds(settings)
+                    }
+
+                    AccessibilityFirstApp(
+                        detector = detector,
+                        ipAddress = ipAddress,
+                        settings = settings,
+                        onSettingsChange = { newSettings -> settings = newSettings }
+                    )
                 } else {
                     Text(
                         text = "Requesting camera permission...",

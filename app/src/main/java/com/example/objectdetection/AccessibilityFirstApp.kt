@@ -40,6 +40,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider // Added Slider import
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -72,6 +73,8 @@ import com.example.objectdetection.ui.theme.RoadModeBlue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+private fun Float.format(digits: Int) = "%.${digits}f".format(this)
 
 // Enums to define the different modes of the app
 enum class OperatingMode {
@@ -131,7 +134,12 @@ sealed class NavigationItem(var route: String, var icon: ImageVector, var title:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?) {
+fun AccessibilityFirstApp(
+    detector: YOLODetector,
+    ipAddress: String?,
+    settings: Settings,
+    onSettingsChange: (Settings) -> Unit
+) {
     val navController = rememberNavController()
     val dangerousItems = remember { mutableStateListOf<String>() }
     val context = LocalContext.current
@@ -156,7 +164,9 @@ fun AccessibilityFirstApp(detector: YOLODetector, ipAddress: String?) {
                 emergencyNumber = emergencyNumber,
                 onEmergencyNumberChange = { emergencyNumber = it },
                 selectedCamera = selectedCamera,
-                onCameraChange = { selectedCamera = it }
+                onCameraChange = { selectedCamera = it },
+                settings = settings,
+                onSettingsChange = onSettingsChange
             )
         }
     }
@@ -207,7 +217,9 @@ fun Navigation(
     emergencyNumber: String,
     onEmergencyNumberChange: (String) -> Unit,
     selectedCamera: Camera,
-    onCameraChange: (Camera) -> Unit
+    onCameraChange: (Camera) -> Unit,
+    settings: Settings,
+    onSettingsChange: (Settings) -> Unit
 ) {
     NavHost(navController, startDestination = NavigationItem.Home.route) {
         composable(NavigationItem.Home.route) {
@@ -232,7 +244,9 @@ fun Navigation(
                 emergencyNumber = emergencyNumber,
                 onEmergencyNumberChange = onEmergencyNumberChange,
                 selectedCamera = selectedCamera,
-                onCameraChange = onCameraChange
+                onCameraChange = onCameraChange,
+                settings = settings,
+                onSettingsChange = onSettingsChange
             )
         }
         composable(NavigationItem.Help.route) {
@@ -613,7 +627,9 @@ fun SettingsScreen(
     emergencyNumber: String,
     onEmergencyNumberChange: (String) -> Unit,
     selectedCamera: Camera,
-    onCameraChange: (Camera) -> Unit
+    onCameraChange: (Camera) -> Unit,
+    settings: Settings,
+    onSettingsChange: (Settings) -> Unit
 ) {
     var houseTimeGap by remember { mutableStateOf(1) }
     var roadTimeGap by remember { mutableStateOf(1) }
@@ -630,6 +646,34 @@ fun SettingsScreen(
     ) {
         item {
             Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        }
+        item {
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Ultrasonic Thresholds", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("Front Distance Threshold: ${settings.frontDistanceThreshold.format(2)} cm")
+                    Slider(
+                        value = settings.frontDistanceThreshold,
+                        onValueChange = { onSettingsChange(settings.copy(frontDistanceThreshold = it)) },
+                        valueRange = 0f..500f
+                    )
+                    Text("Overhead Distance Threshold: ${settings.overheadDistanceThreshold.format(2)} cm")
+                    Slider(
+                        value = settings.overheadDistanceThreshold,
+                        onValueChange = { onSettingsChange(settings.copy(overheadDistanceThreshold = it)) },
+                        valueRange = 0f..500f
+                    )
+                }
+            }
         }
         item {
             DetectionModeSwitch(
