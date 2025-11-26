@@ -1,19 +1,32 @@
 #include <SPI.h>
 #include <WiFi101.h>
 
-char ssid[] = "OPPO";      // Your Wi-Fi network SSID
-char pass[] = "23542354";  // Your Wi-Fi network password
-IPAddress serverIP(172,24,203, 114); // The IP address of your Android device
+char ssid[] = "M35";      // Your Wi-Fi network SSID
+char pass[] = "00000001";  // Your Wi-Fi network password
+IPAddress serverIP(100, 82, 61, 94); // The IP address of your Android device
 int serverPort = 8080;               // The port the TCP server is listening on
 
 WiFiClient client;
 
-const int sensorPin1 = 4; // 3-pin sensor: same pin for trigger and echo
-const int sensorPin2 = 5; // 3-pin sensor: same pin for trigger and echo
+const int sensorPin1 = 4; // Front sensor
+const int sensorPin2 = 5; // Overhead sensor
 
 unsigned long lastReadTime = 0;
 const unsigned long readInterval = 100; // 100ms
-const int DISTANCE_THRESHOLD = 50; // in cm
+
+// --- Thresholds ---
+float frontDistanceThreshold = 100.0; // Default front threshold in cm, will be updated by app
+float overheadDistanceThreshold = 50.0; // Default overhead threshold in cm, will be updated by app
+
+// State to track if we are in a danger state
+bool dangerState = false;
+
+// --- Function Prototypes ---
+long readUltrasonicDistance(int sensorPin);
+void connectToWiFi();
+void connectToServer();
+void sendMessage(const char* message);
+void parseServerMessage(String message);
 
 void setup() {
   Serial.begin(9600);
@@ -27,6 +40,15 @@ void loop() {
     connectToServer();
   }
 
+  // Check for incoming messages from the server
+  if (client.available()) {
+    String line = client.readStringUntil('\n');
+    line.trim();
+    Serial.print("Received: ");
+    Serial.println(line);
+    parseServerMessage(line);
+  }
+
   // Read sensors at intervals
   unsigned long currentTime = millis();
   if (currentTime - lastReadTime >= readInterval) {
@@ -38,18 +60,42 @@ void loop() {
     int distance1 = duration1 * 0.01723; // cm
     int distance2 = duration2 * 0.01723; // cm
 
-    // Only send a message if an object is too close
-    if (distance1 < DISTANCE_THRESHOLD || distance2 < DISTANCE_THRESHOLD) {
+    // Check for danger conditions using the respective thresholds
+    bool isDanger = (distance1 > 0 && distance1 < frontDistanceThreshold) || 
+                    (distance2 > 0 && distance2 < overheadDistanceThreshold);
+
+    if (isDanger && !dangerState) {
+      // State changed from SAFE to DANGER
       sendMessage("DANGER");
+      dangerState = true;
+    } else if (!isDanger && dangerState) {
+      // State changed from DANGER to SAFE
+      sendMessage("SAFE");
+      dangerState = false;
     }
   }
+}
 
-  // We don't expect any messages from the server in this version, so just flush the buffer.
-  if (client.available()) {
-    client.flush();
-  }
+void parseServerMessage(String message) {
+    if (message.startsWith("THRESHOLDS:")) {
+        // Expected format: "THRESHOLDS:front_threshold:overhead_threshold"
+        int firstColon = message.indexOf(':');
+        int secondColon = message.indexOf(':', firstColon + 1);
 
-  delay(50);
+        if (firstColon > 0 && secondColon > 0) {
+            String frontStr = message.substring(firstColon + 1, secondColon);
+            String overheadStr = message.substring(secondColon + 1);
+
+            frontDistanceThreshold = frontStr.toFloat();
+            overheadDistanceThreshold = overheadStr.toFloat();
+
+            Serial.println("Updated thresholds:");
+            Serial.print("  Front: ");
+            Serial.println(frontDistanceThreshold);
+            Serial.print("  Overhead: ");
+            Serial.println(overheadDistanceThreshold);
+        }
+    }
 }
 
 long readUltrasonicDistance(int sensorPin) {

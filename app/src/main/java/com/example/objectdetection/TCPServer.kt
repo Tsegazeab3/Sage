@@ -62,6 +62,9 @@ class TCPServer {
                 val clientNameToRemove = clients.entries.find { it.value == clientSocket }?.key
                 if (clientNameToRemove != null) {
                     clients.remove(clientNameToRemove)
+                    coroutineScope.launch {
+                        _messages.emit("CLIENT_DISCONNECTED:$clientNameToRemove")
+                    }
                 }
                 clientSocket.close()
             }

@@ -21,6 +21,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import android.util.Log
+import com.example.objectdetection.Settings
+import com.example.objectdetection.SocketManager
 import com.example.objectdetection.TrackedObject
 import kotlin.math.abs
 import kotlin.math.pow
@@ -58,6 +60,11 @@ fun PreviewScreen(
     var trackedObjects by remember { mutableStateOf<List<TrackedObject>>(emptyList()) }
     val screenWidth = LocalContext.current.resources.displayMetrics.widthPixels
     val coroutineScope = rememberCoroutineScope()
+    var settings by remember { mutableStateOf(Settings()) }
+
+    LaunchedEffect(settings) {
+        ArduinoConnector.sendThresholds(settings)
+    }
 
     LaunchedEffect(isPreview) {
         ArduinoConnector.messages.collect { message ->
@@ -244,6 +251,29 @@ fun PreviewScreen(
                         onCheckedChange = { highlightAll = it }
                     )
                 }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Bottom
+                ) {
+                    Text("Front Distance Threshold: ${settings.frontDistanceThreshold.format(2)} cm")
+                    Slider(
+                        value = settings.frontDistanceThreshold,
+                        onValueChange = { settings = settings.copy(frontDistanceThreshold = it) },
+                        valueRange = 0f..500f
+                    )
+                    Text("Overhead Distance Threshold: ${settings.overheadDistanceThreshold.format(2)} cm")
+                    Slider(
+                        value = settings.overheadDistanceThreshold,
+                        onValueChange = { settings = settings.copy(overheadDistanceThreshold = it) },
+                        valueRange = 0f..500f
+                    )
+                    Button(onClick = {
+                        ArduinoConnector.sendThresholds(settings)
+                    }) {
+                        Text("Send Settings")
+                    }
+                }
                 Button(onClick = { triggerSpeak = true }) {
                     Text("Trigger Detection")
                 }
@@ -262,3 +292,4 @@ fun PreviewScreen(
         }
     }
 }
+private fun Float.format(digits: Int) = "%.${digits}f".format(this)

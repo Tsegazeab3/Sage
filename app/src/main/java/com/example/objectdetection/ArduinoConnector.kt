@@ -25,8 +25,15 @@ object ArduinoConnector {
                     }
                     message.startsWith("ULTRASONIC:") -> {
                         val ultrasonicMessage = message.substringAfter("ULTRASONIC:")
-                        if (ultrasonicMessage == "DANGER") {
-                            sendMessage("BUTTON", "BUZZ")
+                        when (ultrasonicMessage) {
+                            "DANGER" -> sendMessage("BUTTON", "BUZZ")
+                            "SAFE" -> sendMessage("BUTTON", "STOP_BUZZ")
+                        }
+                    }
+                    message.startsWith("CLIENT_DISCONNECTED:") -> {
+                        val disconnectedClient = message.substringAfter("CLIENT_DISCONNECTED:")
+                        if (disconnectedClient == "ULTRASONIC") {
+                            sendMessage("BUTTON", "STOP_BUZZ")
                         }
                     }
                     // IAM messages can be ignored here or logged if needed
@@ -41,5 +48,10 @@ object ArduinoConnector {
 
     fun sendMessage(clientName: String, message: String) {
         tcpServer.sendMessage(clientName, message)
+    }
+
+    fun sendThresholds(settings: Settings) {
+        val thresholdMessage = "THRESHOLDS:${settings.frontDistanceThreshold}:${settings.overheadDistanceThreshold}"
+        sendMessage("ULTRASONIC", thresholdMessage)
     }
 }

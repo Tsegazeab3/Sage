@@ -1,12 +1,2 @@
-.idea/vcs.xml
-.gradle/
-.idea/apps.iml
-.idea/caches/
-.idea/modules.xml
-.idea/modules/
-app/.cxx/
-local.properties
-.idea/deviceManager.xml
-.kotlin/
-MyApplication/
-app/src/main/assets/logback.xml
+
+/arduino_sketch/buzzer_test.ino
