@@ -77,6 +77,30 @@ The project is divided into several modules:
 2.  Make sure you have the Android NDK installed.
 3.  Build the project. Android Studio will automatically compile the C++ code and include it in the APK.
 
+## Project Setup
+
+In addition to building the Android application, you also need to set up the Arduino and ESP32 devices.
+
+### Arduino Controller
+
+1.  Open the `arduino_sketch/arduino_sketch.ino` file in the Arduino IDE.
+2.  Install the required libraries for your ESP8266/ESP32 board.
+3.  Update the Wi-Fi credentials (SSID and password) in the sketch to connect to the same network as your Android device.
+4.  Update the `serverIp` variable in the sketch to the IP address of your Android device running the app.
+5.  Upload the sketch to your Arduino/ESP device.
+
+### ESP32 Camera
+
+1.  Open the `esp32_camera_sketch/esp32_camera_sketch.ino` file in the Arduino IDE.
+2.  Make sure you have the correct board selected in the Arduino IDE (e.g., "AI Thinker ESP32-CAM").
+3.  Update the Wi-Fi credentials (SSID and password) in the sketch to connect to the same network as your Android device.
+4.  Update the `serverIp` variable in the sketch to the IP address of your Android device running the app.
+5.  Upload the sketch to your ESP32 camera board.
+
+### Ultrasonic Sensor
+
+The ultrasonic sensor is connected to another Arduino/ESP device. The sketch for this device is located in `ultrasonic_sketch/ultrasonic_sketch.ino`. Follow the same steps as for the Arduino Controller to set up this device.
+
 ## Dependencies
 
 *   **NCNN:** A high-performance neural network inference framework for mobile platforms.
