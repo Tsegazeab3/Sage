@@ -30,6 +30,22 @@ The hardware controller is an Arduino-based device with three buttons that allow
 *   **Button 3:** Opens the camera in "Search" mode. In this mode, the user can select an object to search for, and the app will provide feedback when the object is detected.
 *   **Button 3 (Double Press):** Immediately initiates a call to the pre-configured emergency number.
 
+## Operation Modes
+
+The application has several modes of operation that can be configured in the settings screen or via the hardware controller.
+
+*   **Operating Mode:**
+    *   **House Mode:** This mode is optimized for indoor environments. It uses a specific set of object classes for detection that are commonly found in a house.
+    *   **Road Mode:** This mode is intended for outdoor environments. This feature is still under development.
+
+*   **Detection Mode:**
+    *   **Automatic:** The application continuously detects objects and provides feedback automatically.
+    *   **Manual:** The user needs to trigger the detection manually by pressing a button.
+
+*   **Camera Source:**
+    *   **Phone Camera:** Uses the phone's built-in camera for object detection.
+    *   **ESP32 Camera:** Streams video from an external ESP32 camera for object detection.
+
 ## Project Structure
 
 The project is divided into several modules:
