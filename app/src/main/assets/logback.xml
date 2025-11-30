@@ -1,0 +1,8 @@
+<configuration>
+    <!--
+        This is a dummy file to prevent logback-classic from crashing on Android.
+        It does this by preventing the default configuration process, which calls
+        Java 9+ APIs that are not available on Android's Java 8 runtime.
+    -->
+    <statusListener class="ch.qos.logback.core.status.NopStatusListener" />
+</configuration>

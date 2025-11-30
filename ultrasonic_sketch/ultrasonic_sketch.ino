@@ -3,7 +3,7 @@
 
 char ssid[] = "M35";      // Your Wi-Fi network SSID
 char pass[] = "00000001";  // Your Wi-Fi network password
-IPAddress serverIP(100, 82, 61, 94); // The IP address of your Android device
+IPAddress serverIP(100, 82, 7, 74); // T  he IP address of your Android device
 int serverPort = 8080;               // The port the TCP server is listening on
 
 WiFiClient client;
