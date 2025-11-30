@@ -46,6 +46,15 @@ The application has several modes of operation that can be configured in the set
     *   **Phone Camera:** Uses the phone's built-in camera for object detection.
     *   **ESP32 Camera:** Streams video from an external ESP32 camera for object detection.
 
+## Arduino Connector
+
+The `ArduinoConnector.kt` object manages the communication between the Android app and the external Arduino/ESP32 devices. It uses a TCP server to listen for connections from two clients:
+
+*   **`BUTTON` client:** This client is responsible for sending button press events to the app. The app listens for these events to trigger actions like changing the operating mode or opening the camera. The app can also send commands to this client to control a buzzer (e.g., `BUZZ`, `STOP_BUZZ`).
+*   **`ULTRASONIC` client:** This client sends ultrasonic sensor data to the app. The app uses this data to detect obstacles and provides feedback to the user. The app can configure the ultrasonic sensor thresholds by sending a `THRESHOLDS` message to this client.
+
+The communication is handled by the `TCPServer` class, which is not detailed here.
+
 ## Project Structure
 
 The project is divided into several modules:
