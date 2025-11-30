@@ -129,6 +129,17 @@ In "House Mode", the application focuses on a smaller set of classes that are mo
 cup, water bottle, fork, knife, mouse, remote, phone, laptop
 ```
 
+## Troubleshooting
+
+*   **App is not connecting to the Arduino/ESP32 devices:**
+    *   Make sure your Android device and the Arduino/ESP32 devices are connected to the same Wi-Fi network.
+    *   Verify that the `serverIp` variable in the Arduino sketches is set to the correct IP address of your Android device. You can find the IP address in the settings screen of the app.
+    *   Make sure that no other application is using the same TCP port (8080).
+
+*   **Object detection is not working:**
+    *   Make sure you have granted camera permission to the app.
+    *   Check if the `model.ncnn.param` and `model.ncnn.bin` files are present in the `app/src/main/assets` directory.
+
 ## Dependencies
 
 *   **NCNN:** A high-performance neural network inference framework for mobile platforms.
