@@ -101,6 +101,34 @@ In addition to building the Android application, you also need to set up the Ard
 
 The ultrasonic sensor is connected to another Arduino/ESP device. The sketch for this device is located in `ultrasonic_sketch/ultrasonic_sketch.ino`. Follow the same steps as for the Arduino Controller to set up this device.
 
+## YOLO Model
+
+The application uses a YOLO (You Only Look Once) model for object detection. The model is optimized for mobile devices using the NCNN framework.
+
+### All Detected Classes
+
+The model can detect the following 80 classes:
+
+```
+person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light,
+fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow,
+elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee,
+skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard,
+tennis racket, water bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple,
+sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, couch,
+potted plant, bed, dining table, toilet, tv, laptop, mouse, remote, keyboard, phone,
+microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear,
+hair drier, toothbrush
+```
+
+### House Mode Classes
+
+In "House Mode", the application focuses on a smaller set of classes that are more relevant in an indoor environment:
+
+```
+cup, water bottle, fork, knife, mouse, remote, phone, laptop
+```
+
 ## Dependencies
 
 *   **NCNN:** A high-performance neural network inference framework for mobile platforms.
