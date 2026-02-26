@@ -1,5 +1,3 @@
-/arduino_sketch/buzzer_test.ino
-
 # Built application files
 *.apk
 *.aar
@@ -18,13 +16,10 @@ gen/
 out/
 build/
 .gradle/
+tmp/
 
 # Local configuration file (SDK path, etc.)
 local.properties
-
-# Gradle files
-.gradle/
-build/
 
 # Android Studio and IntelliJ IDEA files
 .idea/
