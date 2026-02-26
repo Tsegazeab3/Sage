@@ -1,5 +1,7 @@
 package com.example.objectdetection
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.speech.tts.TextToSpeech
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -38,46 +40,47 @@ fun CameraPreview(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val previewView = remember { PreviewView(context) }
+
+    LaunchedEffect(previewView) {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        cameraProviderFuture.addListener({
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+
+                val preview = Preview.Builder().build()
+                preview.setSurfaceProvider(previewView.surfaceProvider)
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+
+                imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
+                    val bitmap = imageProxy.toBitmap()
+                    val detections = detector.detect(bitmap)
+                    onDetections(detections, imageProxy.imageInfo.rotationDegrees)
+                    imageProxy.close()
+                }
+
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                try {
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageAnalysis
+                    )
+                } catch (exc: Exception) {
+                    Log.e("Camera", "Use case binding failed", exc)
+                }
+            }
+        }, ContextCompat.getMainExecutor(context))
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
-            factory = { context ->
-                PreviewView(context).apply {
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
-
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-                    cameraProviderFuture.addListener({
-                        val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-
-                        val preview = Preview.Builder().build()
-                        preview.setSurfaceProvider(surfaceProvider)
-
-                        val imageAnalysis = ImageAnalysis.Builder()
-                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                            .build()
-
-                        imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
-                            val bitmap = imageProxy.toBitmap()
-                            val detections = detector.detect(bitmap)
-                            onDetections(detections, imageProxy.imageInfo.rotationDegrees)
-                            imageProxy.close()
-                        }
-
-                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-                        try {
-                            cameraProvider.unbindAll()
-                            cameraProvider.bindToLifecycle(
-                                lifecycleOwner,
-                                cameraSelector,
-                                preview,
-                                imageAnalysis
-                            )
-                        } catch (exc: Exception) {
-                            Log.e("Camera", "Use case binding failed", exc)
-                        }
-                    }, ContextCompat.getMainExecutor(context))
-                }
-            },
+            factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
     }

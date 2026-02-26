@@ -6,5 +6,6 @@ data class DetectionResult(
     val x: Float,
     val y: Float,
     val width: Float,
-    val height: Float
+    val height: Float,
+    val trackId: Int = -1 // Default to -1 (no track ID)
 )

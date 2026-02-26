@@ -6,6 +6,8 @@
     #include <android/log.h>
     #include <algorithm>
     #include <android/hardware_buffer.h>
+    #include <chrono>
+    #include "cpu.h"
 #define LOG_TAG "YOLO_NATIVE"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -15,10 +17,13 @@ const float NMS_THRESHOLD = 0.70f;
 const int INPUT_SIZE = 640;
 const int NUM_CLASSES = 80;
 
-YOLODetector::YOLODetector() : modelLoaded(false) {}
+YOLODetector::YOLODetector() : modelLoaded(false) {
+    tracker = new BYTETracker(30, 30);
+}
 
 YOLODetector::~YOLODetector() {
     net.clear();
+    if (tracker) delete tracker;
 }
 
 
@@ -49,6 +54,17 @@ bool YOLODetector::loadModel(AAssetManager* mgr, const char* param, const char* 
             return false;
         }
 
+        // --- Optimize Performance ---
+        // Use big cores for performance and to avoid starving the UI thread.
+        int big_cores = ncnn::get_big_cpu_count();
+        net.opt.num_threads = big_cores > 0 ? big_cores : 4; // Use big cores if available, otherwise default to 4
+        net.opt.use_vulkan_compute = true; // Enable GPU acceleration
+        net.opt.use_fp16_arithmetic = true;
+        net.opt.use_fp16_packed = true;
+        net.opt.use_fp16_storage = true;
+        
+        LOGD("NCNN Options: Threads=%d, Vulkan=%d", net.opt.num_threads, net.opt.use_vulkan_compute);
+
         // 1. Load param (Corrected previously)
         LOGD("Loading param to ncnn...");
         int ret1 = net.load_param(mgr, param);
@@ -75,6 +91,9 @@ bool YOLODetector::loadModel(AAssetManager* mgr, const char* param, const char* 
 
         return modelLoaded;
 }
+
+
+
 std::vector<int> nms(const std::vector<float>& boxes, const std::vector<float>& scores, float iou_threshold) {
     std::vector<int> indices;
     for (size_t i = 0; i < scores.size(); i++) indices.push_back(i);  // Use scores.size()
@@ -127,6 +146,7 @@ std::vector<int> nms(const std::vector<float>& boxes, const std::vector<float>& 
 
 
 std::vector<DetectionResult> YOLODetector::detect(JNIEnv* env, jobject bitmap) {
+    auto start = std::chrono::high_resolution_clock::now();
     std::vector<DetectionResult> results;
     if (!modelLoaded) return results;
 
@@ -136,20 +156,64 @@ std::vector<DetectionResult> YOLODetector::detect(JNIEnv* env, jobject bitmap) {
     if (AndroidBitmap_getInfo(env, bitmap, &info) < 0) return results;
     if (AndroidBitmap_lockPixels(env, bitmap, &pixels) < 0) return results;
 
-    // ✅ FIXED: Pass the correct parameters
-    ncnn::Mat input = preprocess(env, bitmap, info, pixels);
+    // --- Optimized Preprocessing ---
+    preprocess(env, bitmap, info, pixels);
+    
+    // --- Inference ---
     ncnn::Mat output;
     ncnn::Extractor ex = net.create_extractor();
-    ex.input("in0", input);  // Use your input layer name
+    ex.input("in0", this->resized_input);  // Use your input layer name
     ex.extract("out0", output);  // Use your output layer name
+    LOGD("output.w: %d, output.h: %d", output.w, output.h);
 
-    results = postprocess(output, info.width, info.height);
+    std::vector<DetectionResult> raw_detections = postprocess(output, info.width, info.height);
+    
+    // --- Optimized ByteTrack Integration ---
+    std::vector<Object> tracker_objects;
+    for(const auto& det : raw_detections) {
+        Object obj;
+        obj.x = det.x;
+        obj.y = det.y;
+        obj.width = det.width;
+        obj.height = det.height;
+        obj.label = det.classId;
+        obj.prob = det.confidence;
+        tracker_objects.push_back(obj);
+    }
+    
+    frame_counter++;
+    std::vector<Object> tracked_objects;
+    if (frame_counter >= TRACKER_FRAME_SKIP) {
+        tracked_objects = tracker->update(tracker_objects);
+        last_tracked_objects = tracked_objects;
+        frame_counter = 0; // Reset counter
+    } else {
+        tracked_objects = last_tracked_objects; // Use stale tracks
+    }
+    
+    for(const auto& t_obj : tracked_objects) {
+        DetectionResult res;
+        res.classId = t_obj.label;
+        res.confidence = t_obj.prob;
+        res.x = t_obj.x;
+        res.y = t_obj.y;
+        res.width = t_obj.width;
+        res.height = t_obj.height;
+        res.trackId = t_obj.track_id;
+        results.push_back(res);
+    }
 
     AndroidBitmap_unlockPixels(env, bitmap);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    float fps = 1000.0f / (duration > 0 ? duration : 1);
+    LOGD("Inference time: %lld ms, FPS: %.2f", duration, fps);
+
     return results;
 }
 
-ncnn::Mat YOLODetector::preprocess(JNIEnv* env, jobject bitmap, AndroidBitmapInfo& info, void* pixels) {
+void YOLODetector::preprocess(JNIEnv* env, jobject bitmap, AndroidBitmapInfo& info, void* pixels) {
     // Now you have access to the actual pixel data
     ncnn::Mat input = ncnn::Mat::from_pixels(
             (unsigned char*)pixels,
@@ -158,42 +222,45 @@ ncnn::Mat YOLODetector::preprocess(JNIEnv* env, jobject bitmap, AndroidBitmapInf
             info.height
     );
 
-    // Resize using ncnn (no OpenCV)
-    ncnn::Mat resized;
-    ncnn::resize_bilinear(input, resized, 640, 640);
+    // Resize using ncnn (no OpenCV) and store in the class member
+    ncnn::resize_bilinear(input, this->resized_input, 640, 640);
 
     // Normalize
     const float norm_vals[3] = {1.0f / 255.0f, 1.0f / 255.0f, 1.0f / 255.0f};
-    resized.substract_mean_normalize(nullptr, norm_vals);
-
-    return resized;
+    this->resized_input.substract_mean_normalize(nullptr, norm_vals);
 }
 
 std::vector<DetectionResult> YOLODetector::postprocess(const ncnn::Mat& output, int img_w, int img_h) {
     std::vector<DetectionResult> results;
     Detection det;
 
-    // Use Android logging instead of cout
-    __android_log_print(ANDROID_LOG_DEBUG, "YOLO", "Output shape - w:%d h:%d c:%d", output.w, output.h, output.c);
+    // Transpose for better memory access
+    this->transposed_output.create(output.h, output.w);
+    for (int i = 0; i < output.h; i++) {
+        for (int j = 0; j < output.w; j++) {
+            this->transposed_output.row(j)[i] = output.row(i)[j];
+        }
+    }
 
-    int num_boxes = output.w;     // 8400
-    int num_features = output.h;  // 84
+    int num_boxes = this->transposed_output.h;     // 8400
+    int num_features = this->transposed_output.w;  // 84
 
     // Process detections
     for (int i = 0; i < num_boxes; i++) {
-        float cx = output.row(0)[i];
-        float cy = output.row(1)[i];
-        float w = output.row(2)[i];
-        float h = output.row(3)[i];
+        const float* box_features = this->transposed_output.row(i);
+        
+        float cx = box_features[0];
+        float cy = box_features[1];
+        float w = box_features[2];
+        float h = box_features[3];
 
         // Get class scores
+        const float* class_scores = box_features + 4;
         float max_conf = 0.0f;
         int class_id = 0;
-
         for (int j = 0; j < NUM_CLASSES; j++) {
-            float conf = output.row(4 + j)[i];
-            if (conf > max_conf) {
-                max_conf = conf;
+            if (class_scores[j] > max_conf) {
+                max_conf = class_scores[j];
                 class_id = j;
             }
         }
@@ -207,8 +274,8 @@ std::vector<DetectionResult> YOLODetector::postprocess(const ncnn::Mat& output, 
         float y2 = cy + h / 2.0f;
 
         // Scale from 640x640 to original image size
-        float scale_x = img_w / 640.0f;
-        float scale_y = img_h / 640.0f;
+        float scale_x = (float)img_w / INPUT_SIZE;
+        float scale_y = (float)img_h / INPUT_SIZE;
 
         int x1_orig = static_cast<int>(x1 * scale_x);
         int y1_orig = static_cast<int>(y1 * scale_y);
@@ -246,6 +313,7 @@ std::vector<DetectionResult> YOLODetector::postprocess(const ncnn::Mat& output, 
             result.y = det.boxes[idx * 4 + 1];
             result.width = det.boxes[idx * 4 + 2] - det.boxes[idx * 4];
             result.height = det.boxes[idx * 4 + 3] - det.boxes[idx * 4 + 1];
+            result.trackId = -1; // Default
             results.push_back(result);
         }
     }
@@ -253,6 +321,7 @@ std::vector<DetectionResult> YOLODetector::postprocess(const ncnn::Mat& output, 
     return results;
 }
     std::vector<DetectionResult> YOLODetector::detectFromImageProxy(JNIEnv* env, jobject imageProxy) {
+        auto start = std::chrono::high_resolution_clock::now();
         std::vector<DetectionResult> results;
         if (!modelLoaded) return results;
 
@@ -275,24 +344,63 @@ std::vector<DetectionResult> YOLODetector::postprocess(const ncnn::Mat& output, 
         unsigned char* yData = (unsigned char*)env->GetDirectBufferAddress(yBuffer);
         if (!yData) return results;
 
-        // Convert YUV420SP to RGB (NCNN will allocate rgbMat automatically)
-        ncnn::Mat rgbMat;
-        ncnn::yuv420sp2rgb(yData, width, height, rgbMat);
+        // --- Optimized Preprocessing ---
+        // Convert YUV420SP to RGB (reusing rgb_mat)
+        ncnn::yuv420sp2rgb(yData, width, height, this->rgb_mat);
 
-        // Preprocess: resize + normalize
-        ncnn::Mat input;
-        ncnn::resize_bilinear(rgbMat, input, INPUT_SIZE, INPUT_SIZE);
+        // Preprocess: resize + normalize (reusing resized_input)
+        ncnn::resize_bilinear(this->rgb_mat, this->resized_input, INPUT_SIZE, INPUT_SIZE);
         const float norm_vals[3] = {1.f/255.f, 1.f/255.f, 1.f/255.f};
-        input.substract_mean_normalize(nullptr, norm_vals);
+        this->resized_input.substract_mean_normalize(nullptr, norm_vals);
 
         // Run inference
         ncnn::Mat output;
         ncnn::Extractor ex = net.create_extractor();
-        ex.input("in0", input);        // confirm this matches .param
-        ex.extract("out0", output);    // confirm this matches .param
+        ex.input("in0", this->resized_input);
+        ex.extract("out0", output);
 
         // Postprocess detections
-        results = postprocess(output, width, height);
+        std::vector<DetectionResult> raw_detections = postprocess(output, width, height);
+
+        // --- Optimized ByteTrack Integration ---
+        std::vector<Object> tracker_objects;
+        for(const auto& det : raw_detections) {
+            Object obj;
+            obj.x = det.x;
+            obj.y = det.y;
+            obj.width = det.width;
+            obj.height = det.height;
+            obj.label = det.classId;
+            obj.prob = det.confidence;
+            tracker_objects.push_back(obj);
+        }
+        
+        frame_counter++;
+        std::vector<Object> tracked_objects;
+        if (frame_counter >= TRACKER_FRAME_SKIP) {
+            tracked_objects = tracker->update(tracker_objects);
+            last_tracked_objects = tracked_objects;
+            frame_counter = 0; // Reset counter
+        } else {
+            tracked_objects = last_tracked_objects; // Use stale tracks
+        }
+        
+        for(const auto& t_obj : tracked_objects) {
+            DetectionResult res;
+            res.classId = t_obj.label;
+            res.confidence = t_obj.prob;
+            res.x = t_obj.x;
+            res.y = t_obj.y;
+            res.width = t_obj.width;
+            res.height = t_obj.height;
+            res.trackId = t_obj.track_id;
+            results.push_back(res);
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        float fps = 1000.0f / (duration > 0 ? duration : 1);
+        LOGD("ImageProxy Inference time: %lld ms, FPS: %.2f", duration, fps);
 
         return results;
     }

@@ -21,6 +21,7 @@ set_target_properties(lib_ncnn PROPERTIES
 add_library(yolo11ncnn SHARED
         yolo_detector.cpp
         jni_bridge.cpp
+        ByteTracker.cpp
 )
 
 target_include_directories(yolo11ncnn PRIVATE

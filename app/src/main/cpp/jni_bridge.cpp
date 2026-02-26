@@ -36,7 +36,7 @@ Java_com_example_objectdetection_YOLODetector_detectFromImageProxy(JNIEnv* env, 
 
     // Convert to Java objects
     jclass resultClass = env->FindClass("com/example/objectdetection/DetectionResult");
-    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(IFFFFF)V");
+    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(IFFFFFI)V");
 
     jobjectArray results = env->NewObjectArray(detections.size(), resultClass, nullptr);
 
@@ -44,7 +44,7 @@ Java_com_example_objectdetection_YOLODetector_detectFromImageProxy(JNIEnv* env, 
         auto& det = detections[i];
         jobject obj = env->NewObject(resultClass, constructor,
                                      det.classId, det.confidence,
-                                     det.x, det.y, det.width, det.height);
+                                     det.x, det.y, det.width, det.height, det.trackId);
         env->SetObjectArrayElement(results, i, obj);
     }
 
@@ -60,7 +60,7 @@ Java_com_example_objectdetection_YOLODetector_detectFromBitmap(JNIEnv* env, jobj
 
     // Convert to Java objects
     jclass resultClass = env->FindClass("com/example/objectdetection/DetectionResult");
-    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(IFFFFF)V");
+    jmethodID constructor = env->GetMethodID(resultClass, "<init>", "(IFFFFFI)V");
 
     jobjectArray results = env->NewObjectArray(detections.size(), resultClass, nullptr);
 
@@ -68,7 +68,7 @@ Java_com_example_objectdetection_YOLODetector_detectFromBitmap(JNIEnv* env, jobj
         auto& det = detections[i];
         jobject obj = env->NewObject(resultClass, constructor,
                                      det.classId, det.confidence,
-                                     det.x, det.y, det.width, det.height);
+                                     det.x, det.y, det.width, det.height, det.trackId);
         env->SetObjectArrayElement(results, i, obj);
     }
 

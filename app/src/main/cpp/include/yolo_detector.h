@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/bitmap.h>
 #include "../ncnn/include/ncnn/net.h"
+#include "ByteTracker.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,6 +14,7 @@ struct DetectionResult {
     float y;
     float width;
     float height;
+    int trackId; // Added trackId
 };
 
 class YOLODetector {
@@ -27,8 +29,17 @@ public:
 private:
     ncnn::Net net;
     bool modelLoaded;
+    BYTETracker* tracker; // Added tracker
 
-    ncnn::Mat preprocess(JNIEnv* env, jobject bitmap, AndroidBitmapInfo& info, void* pixels);
+    // --- Reusable Buffers & Tracker Optimization ---
+    ncnn::Mat rgb_mat;
+    ncnn::Mat resized_input;
+    int frame_counter = 0;
+    const int TRACKER_FRAME_SKIP = 2; // Run tracker every N frames to save CPU
+    std::vector<Object> last_tracked_objects;
+    ncnn::Mat transposed_output;
+
+    void preprocess(JNIEnv* env, jobject bitmap, AndroidBitmapInfo& info, void* pixels);
     std::vector<DetectionResult> postprocess(const ncnn::Mat& output, int img_w, int img_h);
 };
 

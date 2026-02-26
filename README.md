@@ -140,6 +140,13 @@ cup, water bottle, fork, knife, mouse, remote, phone, laptop
     *   Make sure you have granted camera permission to the app.
     *   Check if the `model.ncnn.param` and `model.ncnn.bin` files are present in the `app/src/main/assets` directory.
 
+## To-Do
+
+*   Implement the "Road Mode" feature.
+*   Improve the accuracy of the object detection model.
+*   Add support for more languages for audio feedback.
+*   Develop a more advanced haptic feedback system.
+
 ## Dependencies
 
 *   **NCNN:** A high-performance neural network inference framework for mobile platforms.

@@ -121,8 +121,9 @@ fun PreviewScreen(
             if (messages.isNotEmpty()) {
                 val finalMessage = "I see " + messages.joinToString(separator = ". ")
                 tts.speak(finalMessage, TextToSpeech.QUEUE_FLUSH, null, null)
+                Log.d("PreviewScreen", finalMessage)
             } else {
-                Log.d("PreviewScreen", "No objects detected.")
+                Log.d("PreviewScreen", "No objects detected. found nothing")
             }
             triggerSpeak = false
         }
