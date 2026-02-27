@@ -1,156 +1,106 @@
-# Object Detection for Accessibility
+# SAGE: Smart Assistive Glasses & Electronics
 
-This is an Android application for object detection designed with accessibility in mind. The app helps visually impaired users navigate their environment by detecting objects and providing audio and haptic feedback. It can operate in two modes: "House Mode" for indoor environments and "Road Mode" for outdoor environments.
+SAGE is a comprehensive assistive technology system designed to empower visually impaired individuals by providing real-time environmental awareness. It combines mobile computing power with distributed hardware sensors to offer object detection, obstacle avoidance, and haptic/audio feedback.
 
-## Features
+## 🌟 Core Features
 
-*   **Real-time Object Detection:** The app uses a YOLO model running on the device with the NCNN deep learning framework to detect objects in real-time from the phone's camera or an external ESP32 camera.
-*   **Multiple Operating Modes:**
-    *   **House Mode:** Optimized for indoor environments, with a specific list of objects it can detect.
-    *   **Road Mode (In-Progress):** Intended for outdoor use.
-*   **Hardware Integration:**
-    *   **Arduino:** The app communicates with an Arduino device to receive button inputs for controlling the app and to send configuration data like ultrasonic sensor thresholds for obstacle avoidance.
-    *   **ESP32 Camera:** The app can stream video from an external ESP32 camera.
-*   **Accessibility Features:**
-    *   **Audio Feedback:** Provides spoken feedback for all major actions and detections.
-    *   **Haptic Feedback:** The Arduino integration provides haptic feedback through connected motors or vibrators.
-    *   **Simple UI:** The user interface is designed to be simple and easy to navigate, with large buttons and clear layouts.
-*   **Emergency Assistance:** A dedicated hardware button can trigger an emergency call to a pre-configured number.
-*   **Customization:**
-    *   **Dangerous Items:** Users can specify a list of "dangerous" objects. The app will provide a more urgent warning when these are detected.
-    *   **Sensor Thresholds:** The sensitivity of the ultrasonic sensors can be adjusted.
-    *   **Camera Source:** Users can switch between the phone's camera and an ESP32 camera.
+-   **AI-Powered Object Detection:** Utilizes **YOLOv11** (via NCNN) for high-performance, real-time object identification.
+-   **Dual Navigation Modes:**
+    -   **House Mode:** Optimized for indoor environments, identifying common household objects.
+    -   **Road Mode:** Focused on outdoor safety and navigation (Coming Soon).
+-   **Distributed Hardware Integration:**
+    -   **ESP32-CAM Support:** Can use an external wireless camera for a "glasses" form factor, discovered automatically via mDNS.
+    -   **Active Obstacle Sensing:** Dual ultrasonic sensors monitor both front-facing and overhead obstacles.
+    -   **Haptic & Audio Alerts:** Immediate buzzer feedback for physical dangers and Text-to-Speech (TTS) for object identification.
+-   **Physical Control Interface:** A dedicated button module allows for mode toggling, triggering specific searches, and emergency assistance without needing to touch the phone screen.
+-   **Safety First:**
+    -   **Emergency Call:** A quick double-press on the physical interface initiates an emergency call.
+    -   **Configurable Thresholds:** Users can adjust distance safety margins directly from the app.
 
-## Hardware Controller
+---
 
-The hardware controller is an Arduino-based device with three buttons that allow the user to control the app without touching the screen.
+## 🛠️ Hardware & Integration
 
-*   **Button 1:** Toggles between "House Mode" and "Road Mode".
-*   **Button 2:** Opens the camera in "Preview" mode, showing a live feed with object detection overlays.
-*   **Button 3:** Opens the camera in "Search" mode. In this mode, the user can select an object to search for, and the app will provide feedback when the object is detected.
-*   **Button 3 (Double Press):** Immediately initiates a call to the pre-configured emergency number.
+The SAGE system is built on a modular hardware architecture designed for reliability and ease of use.
 
-## Operation Modes
+### 1. Obstacle Detection System
+![Obstacle Detection](obstacle_detection.png)
+The obstacle detection module utilizes dual ultrasonic sensors to create a safety perimeter around the user. It specifically monitors:
+- **Frontal Obstacles:** Detecting objects in the direct walking path.
+- **Overhead Hazards:** Identifying low-hanging branches, signs, or doorways that might be missed by traditional canes.
 
-The application has several modes of operation that can be configured in the settings screen or via the hardware controller.
+### 2. Hardware Integration Method
+![Hardware Integration](hardware_integration%20method.png)
+Integration is achieved through a distributed TCP/IP network. The Android device acts as the central hub, managing data flows between the ESP32-CAM (visual input) and the Arduino-based sensors and actuators (physical feedback).
 
-*   **Operating Mode:**
-    *   **House Mode:** This mode is optimized for indoor environments. It uses a specific set of object classes for detection that are commonly found in a house.
-    *   **Road Mode:** This mode is intended for outdoor environments. This feature is still under development.
+### 3. Convenient User Interface & Haptic Response
+![UI and Haptic Response](convinient_user_interface_and_haptic_responce.png)
+Designed for accessibility, this module provides:
+- **Tactile Control:** Three physical buttons allow the user to toggle modes, trigger searches, or call for help without interacting with a touchscreen.
+- **Haptic Feedback:** A high-frequency buzzer provides immediate, intuitive alerts when obstacles are detected within the safety thresholds.
 
-*   **Detection Mode:**
-    *   **Automatic:** The application continuously detects objects and provides feedback automatically.
-    *   **Manual:** The user needs to trigger the detection manually by pressing a button.
+---
 
-*   **Camera Source:**
-    *   **Phone Camera:** Uses the phone's built-in camera for object detection.
-    *   **ESP32 Camera:** Streams video from an external ESP32 camera for object detection.
+## 🏗️ System Architecture
 
-## Arduino Connector
+The system operates as a distributed network of devices communicating over a local Wi-Fi network:
 
-The `ArduinoConnector.kt` object manages the communication between the Android app and the external Arduino/ESP32 devices. It uses a TCP server to listen for connections from two clients:
+1.  **Android Application (The Brain):**
+    *   Hosts a **TCP Server** (Port 8080) to coordinate hardware modules.
+    *   Performs NCNN-accelerated inference on video frames.
+    *   Manages user settings, TTS announcements, and navigation logic.
+2.  **ESP32-CAM (The Eye):**
+    *   Streams MJPEG video over HTTP (Port 81).
+    *   Advertises itself via mDNS for seamless "zero-config" connection to the app.
+3.  **Ultrasonic Module (The Shield):**
+    *   Uses an Arduino with Wi-Fi to monitor distances.
+    *   Sends "DANGER" or "SAFE" signals to the Android app based on real-time distance measurements.
+4.  **Button/Buzzer Module (The Interface):**
+    *   Captures physical button presses (Single/Double press logic).
+    *   Receives "BUZZ" commands from the app to provide tactile alerts.
 
-*   **`BUTTON` client:** This client is responsible for sending button press events to the app. The app listens for these events to trigger actions like changing the operating mode or opening the camera. The app can also send commands to this client to control a buzzer (e.g., `BUZZ`, `STOP_BUZZ`).
-*   **`ULTRASONIC` client:** This client sends ultrasonic sensor data to the app. The app uses this data to detect obstacles and provides feedback to the user. The app can configure the ultrasonic sensor thresholds by sending a `THRESHOLDS` message to this client.
+---
 
-The communication is handled by the `TCPServer` class, which is not detailed here.
+## 📁 Hardware Sketches
 
-## Project Structure
+The `SAGE` repository includes critical firmware for the hardware components:
 
-The project is divided into several modules:
+-   **`esp32_camera_sketch/`**: Configures the ESP32-CAM for low-latency video streaming and mDNS advertising.
+-   **`ultrasonic_sketch/`**: Firmware for the Arduino-based distance sensor. It handles threshold logic and TCP communication with the Android host.
+-   **`arduino_sketch/buzzer_test.ino`**: (Acting as the primary Interface Sketch) Manages the physical buttons for app control and the buzzer for haptic alerts.
+-   **`ultrasonic_sketch/buzzer_test.ino`**: Test utilities for hardware validation.
 
-*   **`app`:** The main Android application module, written in Kotlin.
-    *   **`src/main/java`:** Contains the Kotlin source code for the application.
-        *   **`MainActivity.kt`:** The main entry point of the application.
-        *   **`AccessibilityFirstApp.kt`:** The main Composable function that defines the UI and navigation of the app.
-        *   **`yolodetector.kt`:** A wrapper around the native C++ code for the YOLO detector.
-        *   **`ArduinoConnector.kt`:** Handles communication with the Arduino device.
-        *   **`ESP32CameraStream.kt`:** Handles the video stream from the ESP32 camera.
-    *   **`src/main/cpp`:** Contains the C++ source code for the object detector, using the NCNN framework.
-    *   **`src/main/assets`:** Contains the YOLO model files (`model.ncnn.param` and `model.ncnn.bin`).
-*   **`arduino_sketch`:** Contains the Arduino sketch for the hardware controller.
-*   **`esp32_camera_sketch`:** Contains the Arduino sketch for the ESP32 camera.
+---
 
-## How to Build
+## 🚀 Getting Started
 
-1.  Open the project in Android Studio.
-2.  Make sure you have the Android NDK installed.
-3.  Build the project. Android Studio will automatically compile the C++ code and include it in the APK.
+### Prerequisites
+-   **Android:** Android 8.0+ (Oreo) or higher.
+-   **Hardware:** 
+    -   ESP32-CAM (AI-Thinker model).
+    -   Arduino with Wi-Fi (e.g., MKR1000 or similar supporting `WiFi101`).
+    -   Ultrasonic sensors (HC-SR04 or similar).
+    -   Passive/Active Buzzer and physical push buttons.
 
-## Project Setup
+### Installation
+1.  **Android App:** Open the `SAGE` root folder in Android Studio and deploy the `app` module to your device.
+2.  **Hardware:**
+    *   Update the `ssid` and `pass` in the `.ino` sketches to match your local Wi-Fi.
+    *   Update the `serverIP` in the Arduino sketches to match your Android device's local IP (visible in the app's Settings).
+    *   Upload the respective sketches to your ESP32 and Arduino boards.
 
-In addition to building the Android application, you also need to set up the Arduino and ESP32 devices.
+---
 
-### Arduino Controller
+## 🛠️ Tech Stack
+-   **Mobile:** Kotlin, Jetpack Compose, CameraX.
+-   **AI Inference:** NCNN Framework, YOLOv11.
+-   **Hardware:** C++ (Arduino/ESP32), TCP/IP Networking, mDNS/DNS-SD.
 
-1.  Open the `arduino_sketch/arduino_sketch.ino` file in the Arduino IDE.
-2.  Install the required libraries for your ESP8266/ESP32 board.
-3.  Update the Wi-Fi credentials (SSID and password) in the sketch to connect to the same network as your Android device.
-4.  Update the `serverIp` variable in the sketch to the IP address of your Android device running the app.
-5.  Upload the sketch to your Arduino/ESP device.
+---
 
-### ESP32 Camera
+## 🧠 Detection Models
 
-1.  Open the `esp32_camera_sketch/esp32_camera_sketch.ino` file in the Arduino IDE.
-2.  Make sure you have the correct board selected in the Arduino IDE (e.g., "AI Thinker ESP32-CAM").
-3.  Update the Wi-Fi credentials (SSID and password) in the sketch to connect to the same network as your Android device.
-4.  Update the `serverIp` variable in the sketch to the IP address of your Android device running the app.
-5.  Upload the sketch to your ESP32 camera board.
-
-### Ultrasonic Sensor
-
-The ultrasonic sensor is connected to another Arduino/ESP device. The sketch for this device is located in `ultrasonic_sketch/ultrasonic_sketch.ino`. Follow the same steps as for the Arduino Controller to set up this device.
-
-## YOLO Model
-
-The application uses a YOLO (You Only Look Once) model for object detection. The model is optimized for mobile devices using the NCNN framework.
-
-### All Detected Classes
-
-The model can detect the following 80 classes:
-
-```
-person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light,
-fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow,
-elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee,
-skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard,
-tennis racket, water bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple,
-sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, couch,
-potted plant, bed, dining table, toilet, tv, laptop, mouse, remote, keyboard, phone,
-microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear,
-hair drier, toothbrush
-```
-
-### House Mode Classes
-
-In "House Mode", the application focuses on a smaller set of classes that are more relevant in an indoor environment:
-
-```
-cup, water bottle, fork, knife, mouse, remote, phone, laptop
-```
-
-## Troubleshooting
-
-*   **App is not connecting to the Arduino/ESP32 devices:**
-    *   Make sure your Android device and the Arduino/ESP32 devices are connected to the same Wi-Fi network.
-    *   Verify that the `serverIp` variable in the Arduino sketches is set to the correct IP address of your Android device. You can find the IP address in the settings screen of the app.
-    *   Make sure that no other application is using the same TCP port (8080).
-
-*   **Object detection is not working:**
-    *   Make sure you have granted camera permission to the app.
-    *   Check if the `model.ncnn.param` and `model.ncnn.bin` files are present in the `app/src/main/assets` directory.
-
-## To-Do
-
-*   Implement the "Road Mode" feature.
-*   Improve the accuracy of the object detection model.
-*   Add support for more languages for audio feedback.
-*   Develop a more advanced haptic feedback system.
-
-## Dependencies
-
-*   **NCNN:** A high-performance neural network inference framework for mobile platforms.
-*   **Jetpack Compose:** Android's modern toolkit for building native UI.
-*   **CameraX:** A Jetpack library for camera development.
-*   **Coroutines:** For asynchronous programming.
-*   **Material Design:** For UI components.
+The project includes specialized NCNN-optimized models:
+-   **YOLOv11n:** General-purpose detection for House/Road modes.
+-   **Crosswalk Model:** Specialized model found in `cross_walk_model/` for safe pedestrian crossing assistance.
+-   **NCNN Optimization:** Models are converted and optimized for mobile deployment to ensure high FPS and low battery consumption.
