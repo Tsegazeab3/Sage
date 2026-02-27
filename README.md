@@ -1,4 +1,4 @@
-# SAGE: Smart Assistive Glasses & Electronics
+# SAGE: Smart Assistive Guidance Equipment
 
 SAGE is a comprehensive assistive technology system designed to empower visually impaired individuals by providing real-time environmental awareness. It combines mobile computing power with distributed hardware sensors to offer object detection, obstacle avoidance, and haptic/audio feedback.
 
